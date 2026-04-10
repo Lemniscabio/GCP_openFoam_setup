@@ -457,7 +457,8 @@ Prior reference note:
 
 - `c2d-standard-8` took about `1h 24m` for the earlier reference run
 
-The note is also recorded in [current_test_baseline.md](/Users/kartikey/Desktop/temp/data-notes/notes/current_test_baseline.md).
+Run commands and operator snippets are recorded in [run_commands.md](/Users/kartikey/Desktop/temp/data-notes/notes/run_commands.md).
+Benchmark logging and scaling/cost comparison notes are recorded in [current_test_baseline.md](/Users/kartikey/Desktop/temp/data-notes/notes/current_test_baseline.md).
 
 ## Path Dependencies
 
