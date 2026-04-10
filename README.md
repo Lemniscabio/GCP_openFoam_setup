@@ -577,6 +577,26 @@ gcloud logging read \
 gcloud storage ls gs://openfoam_cases/results/CASE_ID/fixed/JOB_NAME/
 ```
 
+List running Batch jobs:
+
+```bash
+gcloud batch jobs list --location=us-central1 --project=project-688a4c78-5d5b-45b3-b5d --filter="status.state=RUNNING"
+```
+
+Find the VM instance running a specific job (to SSH in for live monitoring):
+
+```bash
+gcloud compute instances list --filter="labels.batch-job-id=JOB_NAME" --format="table(name,zone,status)" --project=project-688a4c78-5d5b-45b3-b5d
+```
+
+SSH into a running Batch VM to check CPU utilization with `top`:
+
+```bash
+gcloud compute ssh INSTANCE_NAME --zone=ZONE --project=project-688a4c78-5d5b-45b3-b5d
+```
+
+Note: Batch VMs are ephemeral and get deleted when the job finishes. SSH in while the job is still running.
+
 ## IAM Summary
 
 Minimum practical roles:
