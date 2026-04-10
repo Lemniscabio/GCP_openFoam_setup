@@ -97,6 +97,8 @@ Important:
 - `MPI_RANKS` is not set by the upload script.
 - `MPI_RANKS` is set later by the admin submission script through the Batch task environment.
 - `MPI_RANKS` is an explicit admin input and is not derived automatically from `CPU_MILLI`.
+- `MPI_RANKS` **must** equal `numberOfSubdomains` in `system/decomposeParDict`. OpenFOAM decomposes the mesh into exactly that many subdomains and each MPI rank solves one. A mismatch causes solver crashes (SIGFPE during momentum predictor).
+- The professor controls `numberOfSubdomains` in the case. The admin must set `MPI_RANKS` to match, not the other way around.
 - The current working directory when `command.sh` runs is the extracted OpenFOAM case root.
 
 ### `scripts/admin/check_case_prefix.sh`
@@ -394,6 +396,23 @@ Submit:
 
 This creates one separate Batch job for one case.
 
+Set `FORCE_SUBMIT=1` to resubmit a case that already has a submission marker:
+
+```bash
+FORCE_SUBMIT=1 ./scripts/admin/submit_one_case.sh \
+  project-688a4c78-5d5b-45b3-b5d \
+  us-central1 \
+  docker.io/kartikeyattri/openfoam:12 \
+  case_0003 \
+  c3d \
+  c3d-standard-8 \
+  8000 \
+  4 \
+  32768 \
+  0 \
+  43200s
+```
+
 ### Admin Flow For All Ready Cases
 
 Submit every ready case on the same fixed VM shape:
@@ -437,6 +456,39 @@ Inside each job:
 - `parallelism = 1`
 
 The MPI parallelism for OpenFOAM happens inside the container through `mpirun`, not through Batch task arrays.
+
+## Variant ID
+
+`VARIANT_ID` is a free-form label used to tag a submission run. It appears in:
+
+- the job name: `of-CASE_ID-VARIANT_ID-TIMESTAMP`
+- GCS result path: `results/CASE_ID/VARIANT_ID/JOB_NAME/`
+- submission marker: `submissions/CASE_ID/VARIANT_ID.latest.json`
+
+Earlier runs used `fixed` as the variant. For benchmarking across machine families, use the family name (e.g. `c2d`, `c3d`) so results are organized per machine type.
+
+## vCPU vs Physical Cores
+
+GCP machine types advertise vCPUs. There is a 2:1 vCPU-to-physical-core ratio:
+
+- `c2d-standard-16` = 16 vCPUs = 8 physical cores
+- `c3d-standard-8` = 8 vCPUs = 4 physical cores
+
+`cpuMilli` in the Batch job JSON counts vCPUs (`8000` = 8 vCPUs). `MPI_RANKS` should be set to the number of **physical cores** (or whatever `numberOfSubdomains` is in the case).
+
+## Machine Family Compatibility
+
+| Family | Local SSD | Spot/Preemptible | Sizes | Notes |
+|--------|-----------|------------------|-------|-------|
+| `c2d`  | Yes       | Yes              | 4 to 112 vCPUs | Tested and working |
+| `c3d`  | No        | Yes              | 4 to 360 vCPUs | Use `LOCAL_SSD_COUNT=0` |
+| `h3`   | No        | No               | 88 vCPUs only  | Overkill for small rank counts |
+
+When `LOCAL_SSD_COUNT=0`, the runtime script falls back to `/tmp/openfoam-scratch` on the boot disk (30 GB default).
+
+## Container Image Tag
+
+Always specify the image tag explicitly (e.g. `docker.io/kartikeyattri/openfoam:12`). Omitting the tag defaults to `:latest`, which may not exist or may point to a different build.
 
 ## Current Parameter Baseline
 
@@ -537,6 +589,20 @@ Minimum practical roles:
 - default Compute Engine service account:
   - permission to read case inputs from GCS
   - permission to write results/submission metadata to GCS
+
+## Current Testing Status
+
+Verified end-to-end:
+
+- professor upload (`professor_upload_case.sh`)
+- single case submission (`submit_one_case.sh`)
+- Batch job execution with local SSD (c2d) and without (c3d)
+- result upload back to GCS
+- resubmission with `FORCE_SUBMIT=1`
+
+Not yet tested:
+
+- bulk submission (`submit_all_ready_cases.sh`) — the "one job per ready case" loop has not been run against multiple ready cases in GCS
 
 ## Final Operational Model
 
