@@ -75,7 +75,7 @@ cd /Users/kartikey/Desktop/temp/openfoam-batch
   16000 \
   8 \
   65536 \
-  100 \
+  1 \
   43200s
 ```
 
@@ -93,9 +93,15 @@ FORCE_SUBMIT=1 ./scripts/admin/submit_one_case.sh \
   16000 \
   8 \
   65536 \
-  100 \
+  1 \
   43200s
 ```
+
+Local SSD note:
+
+- the last numeric field is now `LOCAL_SSD_COUNT`, not size in GB
+- the current Batch runtime mounts only the first attached local SSD as `/mnt/disks/openfoam-scratch`
+- for machine types that require `2`, `4`, or `8` local SSDs, the extra devices are attached to satisfy provisioning rules
 
 ## Image Build Command
 

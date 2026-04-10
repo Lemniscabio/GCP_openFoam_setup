@@ -168,7 +168,7 @@ Choose the final configuration based on whichever matters more:
 - CPU milli: `16000`
 - MPI ranks: `8`
 - memory: `64 GB`
-- local/persistent disk: `100 GB`
+- local SSD count: `1`
 - disk type: `local-ssd`
 - batch region: `us-central1`
 - runtime: `52 minutes 30 seconds`
@@ -189,7 +189,7 @@ Choose the final configuration based on whichever matters more:
     16000 \
     8 \
     65536 \
-    100 \
+    1 \
     43200s
   ```
 - notes:
@@ -216,7 +216,7 @@ Copy this block for each new experiment.
 - CPU milli:
 - MPI ranks:
 - memory:
-- local/persistent disk:
+- local SSD count:
 - disk type:
 - batch region:
 - runtime:

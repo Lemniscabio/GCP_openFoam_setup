@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -ne 9 ]]; then
-  echo "Usage: $0 PROJECT_ID REGION IMAGE_URI MACHINE_TYPE CPU_MILLI MPI_RANKS MEMORY_MIB LOCAL_SSD_SIZE_GB MAX_RUN_DURATION" >&2
+  echo "Usage: $0 PROJECT_ID REGION IMAGE_URI MACHINE_TYPE CPU_MILLI MPI_RANKS MEMORY_MIB LOCAL_SSD_COUNT MAX_RUN_DURATION" >&2
   exit 1
 fi
 
@@ -13,7 +13,7 @@ MACHINE_TYPE="$4"
 CPU_MILLI="$5"
 MPI_RANKS="$6"
 MEMORY_MIB="$7"
-LOCAL_SSD_SIZE_GB="$8"
+LOCAL_SSD_COUNT="$8"
 MAX_RUN_DURATION="$9"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,6 +41,6 @@ while read -r READY_OBJECT; do
     "${CPU_MILLI}" \
     "${MPI_RANKS}" \
     "${MEMORY_MIB}" \
-    "${LOCAL_SSD_SIZE_GB}" \
+    "${LOCAL_SSD_COUNT}" \
     "${MAX_RUN_DURATION}"
 done <<< "${READY_LIST}"

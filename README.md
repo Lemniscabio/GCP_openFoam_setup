@@ -450,8 +450,14 @@ Current test baseline:
 - CPU milli: `16000`
 - MPI ranks: `8`
 - memory MiB: `65536`
-- local SSD GB: `100`
+- local SSD count: `1`
 - max run duration: `43200s`
+
+Local SSD note:
+
+- `LOCAL_SSD_COUNT` means the number of `local-ssd` devices attached to the VM
+- the current runtime mounts only the first attached local SSD at `/mnt/disks/openfoam-scratch`
+- if you use a count like `2` for a machine-family constraint such as `c2d-standard-32`, the extra SSDs are attached but not striped together
 
 Prior reference note:
 

@@ -23,7 +23,7 @@ sanitize_job_part() {
 }
 
 if [[ $# -gt 11 ]]; then
-  echo "Usage: $0 [PROJECT_ID] [REGION] [IMAGE_URI] [CASE_ID] [VARIANT_ID] [MACHINE_TYPE] [CPU_MILLI] [MPI_RANKS] [MEMORY_MIB] [LOCAL_SSD_SIZE_GB] [MAX_RUN_DURATION]" >&2
+  echo "Usage: $0 [PROJECT_ID] [REGION] [IMAGE_URI] [CASE_ID] [VARIANT_ID] [MACHINE_TYPE] [CPU_MILLI] [MPI_RANKS] [MEMORY_MIB] [LOCAL_SSD_COUNT] [MAX_RUN_DURATION]" >&2
   exit 1
 fi
 
@@ -36,7 +36,7 @@ MACHINE_TYPE="${6:-}"
 CPU_MILLI="${7:-}"
 MPI_RANKS="${8:-}"
 MEMORY_MIB="${9:-}"
-LOCAL_SSD_SIZE_GB="${10:-}"
+LOCAL_SSD_COUNT="${10:-}"
 MAX_RUN_DURATION="${11:-}"
 
 PROJECT_ID="${PROJECT_ID:-$(ask "GCP project ID" "project-688a4c78-5d5b-45b3-b5d")}"
@@ -48,7 +48,7 @@ MACHINE_TYPE="${MACHINE_TYPE:-$(ask "Machine type" "c2d-standard-16")}"
 CPU_MILLI="${CPU_MILLI:-$(ask "CPU milli" "16000")}"
 MPI_RANKS="${MPI_RANKS:-$(ask "MPI ranks" "8")}"
 MEMORY_MIB="${MEMORY_MIB:-$(ask "Memory MiB" "65536")}"
-LOCAL_SSD_SIZE_GB="${LOCAL_SSD_SIZE_GB:-$(ask "Local SSD GB" "100")}"
+LOCAL_SSD_COUNT="${LOCAL_SSD_COUNT:-$(ask "Local SSD count" "1")}"
 MAX_RUN_DURATION="${MAX_RUN_DURATION:-$(ask "Max run duration" "43200s")}"
 
 # Edit this one line if the bucket changes.
@@ -79,6 +79,37 @@ if gcloud storage ls "${SUBMISSION_MARKER}" >/dev/null 2>&1 && [[ "${FORCE_SUBMI
 fi
 
 gcloud config set project "${PROJECT_ID}" >/dev/null
+
+DISKS_BLOCK=""
+VOLUMES_BLOCK=""
+if [[ "${LOCAL_SSD_COUNT}" != "0" ]]; then
+  DISKS_BLOCK=$'          "disks": [\n'
+  for ((i = 1; i <= LOCAL_SSD_COUNT; i++)); do
+    DEVICE_NAME="openfoam-scratch-${i}"
+    DISKS_BLOCK+=$'            {\n'
+    DISKS_BLOCK+=$'              "newDisk": {\n'
+    DISKS_BLOCK+=$'                "type": "local-ssd",\n'
+    DISKS_BLOCK+=$'                "sizeGb": 375\n'
+    DISKS_BLOCK+=$'              },\n'
+    DISKS_BLOCK+="              \"deviceName\": \"${DEVICE_NAME}\""$'\n'
+    DISKS_BLOCK+=$'            }'
+    if (( i < LOCAL_SSD_COUNT )); then
+      DISKS_BLOCK+=","
+    fi
+    DISKS_BLOCK+=$'\n'
+  done
+  DISKS_BLOCK+=$'          ]'
+  VOLUMES_BLOCK=$(cat <<EOF
+        "volumes": [
+          {
+            "deviceName": "openfoam-scratch-1",
+            "mountPath": "/mnt/disks/openfoam-scratch",
+            "mountOptions": "rw,async"
+          }
+        ]
+EOF
+)
+fi
 
 cat > "${CONFIG_PATH}" <<EOF
 {
@@ -114,14 +145,7 @@ cat > "${CONFIG_PATH}" <<EOF
           "cpuMilli": ${CPU_MILLI},
           "memoryMib": ${MEMORY_MIB}
         },
-        "maxRunDuration": "${MAX_RUN_DURATION}",
-        "volumes": [
-          {
-            "deviceName": "openfoam-scratch",
-            "mountPath": "/mnt/disks/openfoam-scratch",
-            "mountOptions": "rw,async"
-          }
-        ]
+        "maxRunDuration": "${MAX_RUN_DURATION}"$( [[ -n "${VOLUMES_BLOCK}" ]] && printf ',\n%s' "${VOLUMES_BLOCK}" )
       }
     }
   ],
@@ -129,16 +153,7 @@ cat > "${CONFIG_PATH}" <<EOF
     "instances": [
       {
         "policy": {
-          "machineType": "${MACHINE_TYPE}",
-          "disks": [
-            {
-              "newDisk": {
-                "type": "local-ssd",
-                "sizeGb": ${LOCAL_SSD_SIZE_GB}
-              },
-              "deviceName": "openfoam-scratch"
-            }
-          ]
+          "machineType": "${MACHINE_TYPE}"$( [[ -n "${DISKS_BLOCK}" ]] && printf ',\n%s' "${DISKS_BLOCK}" )
         }
       }
     ]
