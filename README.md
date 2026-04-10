@@ -458,6 +458,14 @@ Local SSD note:
 - `LOCAL_SSD_COUNT` means the number of `local-ssd` devices attached to the VM
 - the current runtime mounts only the first attached local SSD at `/mnt/disks/openfoam-scratch`
 - if you use a count like `2` for a machine-family constraint such as `c2d-standard-32`, the extra SSDs are attached but not striped together
+- not all machine families support local SSDs (e.g. `c3d`, `h3` do not)
+- when `LOCAL_SSD_COUNT=0`, the runtime script falls back to `/tmp/openfoam-scratch` on the boot disk
+
+Boot disk note:
+
+- when no local SSD is used, solver scratch goes to the boot disk
+- GCP Batch default boot disk is 30 GB `pd-balanced`
+- to increase size or change type, add a `bootDisk` block inside `policy` in the job JSON (see commented example in `submit_one_case.sh` around line 115)
 
 Prior reference note:
 

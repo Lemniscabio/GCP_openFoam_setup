@@ -111,6 +111,19 @@ EOF
 )
 fi
 
+# Boot disk config (lines 155-157 in the JSON below):
+# If the machine family does not support local SSDs (e.g. c3d, h3), the solver
+# writes scratch to the boot disk. Default is 30 GB pd-balanced.
+# To increase or change type, add a "bootDisk" block inside "policy":
+#
+#   "policy": {
+#     "machineType": "c3d-standard-8",
+#     "bootDisk": {
+#       "type": "pd-ssd",
+#       "sizeGb": 50
+#     }
+#   }
+#
 cat > "${CONFIG_PATH}" <<EOF
 {
   "taskGroups": [
