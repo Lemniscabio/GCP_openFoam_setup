@@ -70,20 +70,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"${SCRIPT_DIR}/check_case_prefix.sh" "${CASE_ID}"
+if [[ "${DRY_RUN:-0}" != "1" ]]; then
+  "${SCRIPT_DIR}/check_case_prefix.sh" "${CASE_ID}"
+fi
 
-if gcloud storage ls "${SUBMISSION_MARKER}" >/dev/null 2>&1 && [[ "${FORCE_SUBMIT:-0}" != "1" ]]; then
+if [[ "${DRY_RUN:-0}" != "1" ]] \
+   && gcloud storage ls "${SUBMISSION_MARKER}" >/dev/null 2>&1 \
+   && [[ "${FORCE_SUBMIT:-0}" != "1" ]]; then
   echo "Submission marker exists for case=${CASE_ID} variant=${VARIANT_ID}" >&2
   echo "Set FORCE_SUBMIT=1 if you want to submit again." >&2
   exit 1
 fi
 
-gcloud config set project "${PROJECT_ID}" >/dev/null
+if [[ "${DRY_RUN:-0}" != "1" ]]; then
+  gcloud config set project "${PROJECT_ID}" >/dev/null
+fi
 
-DISKS_BLOCK=""
-VOLUMES_BLOCK=""
+SCRATCH_DISK_TYPE="${SCRATCH_DISK_TYPE:-pd-ssd}"
+SCRATCH_DISK_GB="${SCRATCH_DISK_GB:-200}"
+
+DISKS_BLOCK=$'          "disks": [\n'
 if [[ "${LOCAL_SSD_COUNT}" != "0" ]]; then
-  DISKS_BLOCK=$'          "disks": [\n'
   for ((i = 1; i <= LOCAL_SSD_COUNT; i++)); do
     DEVICE_NAME="openfoam-scratch-${i}"
     DISKS_BLOCK+=$'            {\n'
@@ -98,8 +105,18 @@ if [[ "${LOCAL_SSD_COUNT}" != "0" ]]; then
     fi
     DISKS_BLOCK+=$'\n'
   done
-  DISKS_BLOCK+=$'          ]'
-  VOLUMES_BLOCK=$(cat <<EOF
+else
+  DISKS_BLOCK+=$'            {\n'
+  DISKS_BLOCK+=$'              "newDisk": {\n'
+  DISKS_BLOCK+="                \"type\": \"${SCRATCH_DISK_TYPE}\","$'\n'
+  DISKS_BLOCK+="                \"sizeGb\": ${SCRATCH_DISK_GB}"$'\n'
+  DISKS_BLOCK+=$'              },\n'
+  DISKS_BLOCK+=$'              "deviceName": "openfoam-scratch-1"\n'
+  DISKS_BLOCK+=$'            }\n'
+fi
+DISKS_BLOCK+=$'          ]'
+
+VOLUMES_BLOCK=$(cat <<EOF
         "volumes": [
           {
             "deviceName": "openfoam-scratch-1",
@@ -109,21 +126,7 @@ if [[ "${LOCAL_SSD_COUNT}" != "0" ]]; then
         ]
 EOF
 )
-fi
 
-# Boot disk config (lines 155-157 in the JSON below):
-# If the machine family does not support local SSDs (e.g. c3d, h3), the solver
-# writes scratch to the boot disk. Default is 30 GB pd-balanced.
-# To increase or change type, add a "bootDisk" block inside "policy":
-#
-#   "policy": {
-#     "machineType": "c3d-standard-8",
-#     "bootDisk": {
-#       "type": "pd-ssd",
-#       "sizeGb": 50
-#     }
-#   }
-#
 cat > "${CONFIG_PATH}" <<EOF
 {
   "taskGroups": [
@@ -158,7 +161,8 @@ cat > "${CONFIG_PATH}" <<EOF
           "cpuMilli": ${CPU_MILLI},
           "memoryMib": ${MEMORY_MIB}
         },
-        "maxRunDuration": "${MAX_RUN_DURATION}"$( [[ -n "${VOLUMES_BLOCK}" ]] && printf ',\n%s' "${VOLUMES_BLOCK}" )
+        "maxRunDuration": "${MAX_RUN_DURATION}",
+${VOLUMES_BLOCK}
       }
     }
   ],
@@ -166,7 +170,8 @@ cat > "${CONFIG_PATH}" <<EOF
     "instances": [
       {
         "policy": {
-          "machineType": "${MACHINE_TYPE}"$( [[ -n "${DISKS_BLOCK}" ]] && printf ',\n%s' "${DISKS_BLOCK}" )
+          "machineType": "${MACHINE_TYPE}",
+${DISKS_BLOCK}
         }
       }
     ]
@@ -179,6 +184,11 @@ cat > "${CONFIG_PATH}" <<EOF
   }
 }
 EOF
+
+if [[ "${DRY_RUN:-0}" == "1" ]]; then
+  cat "${CONFIG_PATH}"
+  exit 0
+fi
 
 gcloud batch jobs submit "${JOB_NAME}" \
   --location "${REGION}" \
@@ -197,6 +207,8 @@ cat > "${META_PATH}" <<EOF
 }
 EOF
 
-gcloud storage cp "${META_PATH}" "${SUBMISSION_MARKER}"
+if [[ "${DRY_RUN:-0}" != "1" ]]; then
+  gcloud storage cp "${META_PATH}" "${SUBMISSION_MARKER}"
+fi
 
 echo "Submitted ${JOB_NAME}"
