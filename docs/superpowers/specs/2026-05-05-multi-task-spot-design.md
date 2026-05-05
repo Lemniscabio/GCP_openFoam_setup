@@ -156,8 +156,9 @@ cases/CASE_ID/{case.tar.gz, command.sh, manifest.json, SHA256SUMS, READY}
 ### Job-level config (Batch JSON)
 
 - `allocationPolicy.instances[].policy.provisioningModel: "SPOT"` (configurable; STANDARD remains the default until a `--spot` flag or `PROVISIONING_MODEL` env var is set).
-- Graceful shutdown configured for the **120 s** Spot preemption window.
 - `taskSpec.maxRetryCount: ${MAX_RETRY_COUNT:-3}`.
+- `taskSpec.lifecyclePolicies` retries on **exit code 50001** (Batch's documented Spot-preemption exit code; the trap exits with this code).
+- **Preemption window is whatever Batch's default is** (currently 30 s for Spot). GCP Batch's `InstancePolicy` does not expose `scheduling.gracefulShutdown` or `scheduling.preemptionNoticeDuration` — extending the window to 120 s requires switching from the inline `policy` to an `instanceTemplate` reference, which is a substantial refactor (out of scope; tracked as a deferred upgrade). The design is built around the 30 s default: the continuous rsync minimizes the SIGTERM-to-flush data volume so 30 s is enough for typical cases.
 
 ### Runtime — checkpoint side-process
 
@@ -202,7 +203,7 @@ Behavior on `SIGTERM` (and `SIGINT` for safety):
 4. Copy the attempt's logs to `results/.../task_<i>/attempts/${RUN_TS}/{runtime.json, solver.stdout.log, exit_code.txt}`. No `_FAILED` marker at the top level (this is a preemption, not a failure).
 5. Exit non-zero so Batch reschedules a retry on a new VM.
 
-The 120 s graceful window covers all five steps with margin: each operation is small (one delta rsync, a few small text files).
+The 30 s default Spot window is sufficient for these five steps in typical cases: the continuous loop has already shipped most data, so the final flush is just the delta since the last successful sync (typically tens of MB to a few hundred MB). For very large or slow-network cases, more than one writeInterval of work may be lost on preemption — accepted trade-off given Batch's inability to extend the window.
 
 ### Resume detection
 
@@ -347,6 +348,7 @@ Detailed test plan is the responsibility of the implementation plan. At spec lev
 
 - Mixed machine shapes within one multi-task job. (Out of scope; one shape per submission.)
 - Existing-disk PD reuse on retry. (Decided against; complexity vs. marginal benefit.)
+- 120 s Spot preemption notice via `scheduling.preemptionNoticeDuration`. (Decided against; requires moving from inline `InstancePolicy` to `instanceTemplate`, which forces machineType + scratch-disk config into N pre-created templates. Deferred until measured preemption losses justify it.)
 - Filestore/NFS/hyperdisk. (Future, only if pd-ssd I/O proves bottleneck.)
 - Steady-state-only checkpoint pruning. (Decided against; additive sync serves both regimes uniformly.)
 - Boot disk size/type changes. (Boot disk no longer touches scratch; default 30 GB pd-balanced is sufficient.)

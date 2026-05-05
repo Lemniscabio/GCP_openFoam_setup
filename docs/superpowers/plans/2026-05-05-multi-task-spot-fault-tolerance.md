@@ -899,7 +899,7 @@ result tarball is built."
 
 ## Task 8 — Phase C: SIGTERM Trap + Per-Attempt Logs
 
-Trap installs before solver launch. On SIGTERM: stop solver, final rsync, write `preempted.json`, copy attempt logs, exit 50000.
+Trap installs before solver launch. On SIGTERM: stop solver, final rsync, write `preempted.json`, copy attempt logs, exit 50001.
 
 **Files:**
 - Modify: `openfoam-batch/scripts/admin/run_case_in_batch.sh`
@@ -909,7 +909,7 @@ Trap installs before solver launch. On SIGTERM: stop solver, final rsync, write 
 
 Append to `openfoam-batch/tests/run_case_in_batch_test.sh`:
 ```bash
-start_test "on_sigterm: final rsync + preempted.json + exit 50000"
+start_test "on_sigterm: final rsync + preempted.json + exit 50001"
 setup_tmp_workspace
 SCRATCH_ROOT="${TMPDIR_TEST}/scratch"
 CASE_DIR="${SCRATCH_ROOT}/cx/case"
@@ -932,7 +932,7 @@ source "${TMPDIR_TEST}/trap.sh"
 
 # Run with subshell so exit doesn't kill our test
 (on_sigterm) || rc=$?
-assert_eq "50000" "${rc:-}" "exit code 50000"
+assert_eq "50001" "${rc:-}" "exit code 50001"
 assert_contains "rsync" "$(cat "${GCLOUD_LOG}")" "final rsync invoked"
 assert_contains "preempted.json" "$(cat "${GCLOUD_LOG}")" "preempted.json uploaded"
 assert_contains "attempts/20260505T000000Z" "$(cat "${GCLOUD_LOG}")" "logs copied to attempts dir"
@@ -982,7 +982,7 @@ EOF2
     gcloud storage cp "${STAGE_DIR}/runtime.json" \
       "${RESULT_PREFIX}/attempts/${RUN_TS}/runtime.json" || true
   fi
-  exit 50000
+  exit 50001
 }
 ```
 
@@ -1031,7 +1031,7 @@ git commit -m "feat(runtime): SIGTERM trap with final flush + preempted.json
 
 Solver runs under setsid so the trap can SIGTERM the whole process
 group. On SIGTERM: final additive rsync, write preempted.json, copy
-per-attempt logs to results/.../attempts/<RUN_TS>/, exit 50000 (matched
+per-attempt logs to results/.../attempts/<RUN_TS>/, exit 50001 (matched
 to lifecyclePolicies in the Batch JSON in a later commit)."
 ```
 
@@ -1130,7 +1130,7 @@ prefix. Failure additionally writes _FAILED inside the attempt dir."
 
 ## Task 10 — Phase C: Spot/Retry/InstanceTermination JSON In submit_one_case.sh
 
-Add `provisioningModel`, `maxRetryCount`, `lifecyclePolicies` (retry on exit 50000), `instanceTermination` (120 s) to the Batch JSON.
+Add `provisioningModel`, `maxRetryCount`, `lifecyclePolicies` (retry on exit 50001), `instanceTermination` (120 s) to the Batch JSON.
 
 **Files:**
 - Modify: `openfoam-batch/scripts/admin/submit_one_case.sh`
@@ -1140,7 +1140,7 @@ Add `provisioningModel`, `maxRetryCount`, `lifecyclePolicies` (retry on exit 500
 
 Append to `openfoam-batch/tests/submit_one_case_test.sh`:
 ```bash
-start_test "default JSON has STANDARD provisioning, maxRetryCount, lifecyclePolicy, 120s termination"
+start_test "default JSON has STANDARD provisioning, maxRetryCount, lifecyclePolicy"
 setup_tmp_workspace
 JSON="$(GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
   project-test us-central1 docker.io/test:1 \
@@ -1148,9 +1148,11 @@ JSON="$(GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
   16000 8 65536 1 43200s 2>"${TMPDIR_TEST}/stderr")"
 assert_eq "STANDARD" "$(echo "${JSON}" | jq -r '.allocationPolicy.instances[0].policy.provisioningModel')" "default STANDARD"
 assert_eq "3" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.maxRetryCount')" "default maxRetryCount"
-assert_eq "50000" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.lifecyclePolicies[0].actionCondition.exitCodes[0]')" "retry on 50000"
+assert_eq "50001" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.lifecyclePolicies[0].actionCondition.exitCodes[0]')" "retry on 50001"
 assert_eq "RETRY_TASK" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.lifecyclePolicies[0].action')" "RETRY_TASK action"
-assert_eq "120s" "$(echo "${JSON}" | jq -r '.allocationPolicy.instanceTermination.preemptionDelay')" "120s graceful"
+# Note: there is no instanceTermination.preemptionDelay — Batch does not expose
+# scheduling.gracefulShutdown via InstancePolicy. The design relies on Batch's
+# default Spot preemption window (currently 30s).
 teardown_tmp_workspace
 
 start_test "PROVISIONING_MODEL=SPOT and MAX_RETRY_COUNT override"
@@ -1177,7 +1179,6 @@ In `openfoam-batch/scripts/admin/submit_one_case.sh`, after the `MAX_RUN_DURATIO
 ```bash
 PROVISIONING_MODEL="${PROVISIONING_MODEL:-STANDARD}"
 MAX_RETRY_COUNT="${MAX_RETRY_COUNT:-3}"
-PREEMPTION_DELAY="${PREEMPTION_DELAY:-120s}"
 ```
 
 In the JSON template, modify the `policy` block to include `provisioningModel`. Find:
@@ -1209,7 +1210,7 @@ Replace with:
         "maxRetryCount": ${MAX_RETRY_COUNT},
         "lifecyclePolicies": [
           {
-            "actionCondition": { "exitCodes": [50000] },
+            "actionCondition": { "exitCodes": [50001] },
             "action": "RETRY_TASK"
           }
         ],
@@ -1218,35 +1219,7 @@ ${VOLUMES_BLOCK}
     }
 ```
 
-In `allocationPolicy`, add `instanceTermination`. Find the closing of `allocationPolicy`:
-```bash
-  "allocationPolicy": {
-    "instances": [
-      {
-        "policy": {
-...
-        }
-      }
-    ]
-  },
-```
-Replace with:
-```bash
-  "allocationPolicy": {
-    "instances": [
-      {
-        "policy": {
-...
-        }
-      }
-    ],
-    "instanceTermination": {
-      "preemptionDelay": "${PREEMPTION_DELAY}"
-    }
-  },
-```
-
-(Leave the `...` exactly as it is in the script — only add the new `instanceTermination` block after the `instances` array.)
+No `instanceTermination` block is added — Batch's `AllocationPolicy` does not expose graceful-shutdown configuration. Spot VMs use Batch's default preemption window.
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -1271,7 +1244,7 @@ git commit -m "feat(submit): add Spot, retry, and 120s graceful-shutdown to Batc
 
 PROVISIONING_MODEL (default STANDARD, set SPOT to enable spot),
 MAX_RETRY_COUNT (default 3), PREEMPTION_DELAY (default 120s).
-A lifecyclePolicy retries on exit 50000 (the runtime's preemption
+A lifecyclePolicy retries on exit 50001 (the runtime's preemption
 exit code)."
 ```
 
@@ -1508,7 +1481,7 @@ cat > "${CONFIG_PATH}" <<EOF
         "maxRetryCount": ${MAX_RETRY_COUNT},
         "lifecyclePolicies": [
           {
-            "actionCondition": { "exitCodes": [50000] },
+            "actionCondition": { "exitCodes": [50001] },
             "action": "RETRY_TASK"
           }
         ],
@@ -1644,8 +1617,8 @@ Behavior on a Spot VM:
 
 - Graceful shutdown window is set to 120 seconds via `instanceTermination.preemptionDelay`.
 - The runtime continuously rsyncs solver state to `gs://<bucket>/checkpoints/CASE_ID/VARIANT_ID/latest/` (event-driven, additive — no tar/gzip during the run).
-- On preemption (SIGTERM): runtime kills the solver, runs one final rsync, writes `preempted.json`, copies attempt logs to `results/.../task_<i>/attempts/<RUN_TS>/`, exits 50000.
-- A `lifecyclePolicies` rule classifies exit 50000 as `RETRY_TASK`; Batch reschedules on a fresh VM up to `maxRetryCount` times.
+- On preemption (SIGTERM): runtime kills the solver, runs one final rsync, writes `preempted.json`, copies attempt logs to `results/.../task_<i>/attempts/<RUN_TS>/`, exits 50001.
+- A `lifecyclePolicies` rule classifies exit 50001 as `RETRY_TASK`; Batch reschedules on a fresh VM up to `maxRetryCount` times.
 - The retry attempt detects the GCS checkpoint, restores it, forces `startFrom latestTime`, and resumes from where it left off.
 
 The checkpoint is automatically deleted from GCS on a successful run. Orphan checkpoints are cleaned by a one-time bucket lifecycle rule (see "GCS Lifecycle" below).
@@ -1915,6 +1888,6 @@ After all six smoke checks pass, the implementation is verified end-to-end.
 
 ## Open Items For Implementor
 
-1. **Batch JSON field for graceful shutdown** — `allocationPolicy.instanceTermination.preemptionDelay` is the field used in this plan, derived from spec intent and current Batch docs as of writing. Confirm the field name in the implementation against `gcloud batch jobs describe` output on a real Spot job before relying on it; if it differs, update Task 10 and Task 12 JSON accordingly. The exit-code-50000 + lifecyclePolicies path is independently load-bearing, so even if `preemptionDelay` is wrong the resume flow still works (with the default 30 s window).
+1. **No graceful-shutdown field in Batch JSON** — verified against Batch docs: `InstancePolicy` exposes no `gracefulShutdown` / `preemptionNoticeDuration`. Spot VMs use Batch's default 30 s preemption window. The 120 s upgrade path (instance templates) is intentionally deferred; see spec's Non-Goals.
 2. **`setsid` availability** — used in Task 8 to run the solver in its own process group so the trap can SIGTERM the whole tree. Check `which setsid` inside the runtime image; it's normally part of `util-linux`. If absent, add `apt-get install -y util-linux` to the Dockerfile.
 3. **Multi-attempt `_FAILED` overwrite policy** — current plan writes `_FAILED` at the canonical path on every non-preempt failure attempt. Successful retry overwrites with `_SUCCESS`. If you ever want "only the final attempt's `_FAILED` is canonical," that's a future change — Batch's lack of attempt-count visibility makes it hard to detect "this is the last attempt" without an external poller.
