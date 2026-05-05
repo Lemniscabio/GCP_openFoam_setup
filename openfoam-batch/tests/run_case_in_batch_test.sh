@@ -106,21 +106,25 @@ SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
 CASE_DIR="${SCRATCH_ROOT_TEST}/cx/case"
 mkdir -p "${CASE_DIR}/processor0/0" "${CASE_DIR}/system"
 
-# Extract just the function definition (from `checkpoint_loop()` to its closing `}`).
+# Extract just the function definition (from `checkpoint_loop()` to the next `^}` at column 0).
 sed -n '/^checkpoint_loop()/,/^}/p' \
   "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh" \
   > "${TMPDIR_TEST}/loop.sh"
 
-# Source the function with the env vars it needs.
+# Export env vars so the function (which inherits them) sees them when invoked
+# as a background job. Plain `VAR=val source ...` only sets them for the source
+# call itself; we need them in the calling shell's env.
+export BUCKET=tb CASE_ID=cx VARIANT_ID=fixed
+export CHECKPOINT_POLL_SEC=1
+export CASE_DIR
+export CHECKPOINT_PREFIX="gs://tb/checkpoints/cx/fixed/latest"
+
 # shellcheck disable=SC1091
-BUCKET=tb CASE_ID=cx VARIANT_ID=fixed CHECKPOINT_POLL_SEC=1 \
-CASE_DIR="${CASE_DIR}" \
-CHECKPOINT_PREFIX="gs://tb/checkpoints/cx/fixed/latest" \
 source "${TMPDIR_TEST}/loop.sh"
 
 checkpoint_loop &
 LOOP_PID=$!
-sleep 2  # one poll cycle: should be a no-op (no new dir relative to what's already there at startup)
+sleep 2  # one poll cycle: should be a no-op (no new dir relative to startup)
 
 # Now create a "new" timestep dir and wait for the next cycle.
 mkdir -p "${CASE_DIR}/processor0/100"
@@ -131,6 +135,9 @@ wait "${LOOP_PID}" 2>/dev/null || true
 
 assert_contains "rsync" "$(cat "${GCLOUD_LOG}")" "loop invoked rsync after new timestep dir appeared"
 assert_contains "checkpoints/cx/fixed/latest" "$(cat "${GCLOUD_LOG}")" "rsync target prefix"
+
+# Cleanup so subsequent subtests don't see leaked exports.
+unset BUCKET CASE_ID VARIANT_ID CHECKPOINT_POLL_SEC CASE_DIR CHECKPOINT_PREFIX
 teardown_tmp_workspace
 
 exit "${TEST_FAILURES}"

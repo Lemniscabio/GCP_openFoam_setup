@@ -75,11 +75,10 @@ fi
 
 CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
 
-{
 checkpoint_loop() {
   local last_seen=""
   while true; do
-    sleep "${_CHECKPOINT_POLL_SEC:-30}"
+    sleep "${CHECKPOINT_POLL_SEC}"
     local newest
     newest=$(ls -1 "${CASE_DIR}/processor0" 2>/dev/null \
              | grep -E '^[0-9]+(\.[0-9]+)?$' \
@@ -87,18 +86,13 @@ checkpoint_loop() {
     if [[ -n "${newest}" && "${newest}" != "${last_seen}" ]]; then
       gcloud storage rsync --recursive \
         "${CASE_DIR}/processor*" \
-        "${_CHECKPOINT_PREFIX}/" || true
+        "${CHECKPOINT_PREFIX}/" || true
       gcloud storage rsync --recursive \
         "${CASE_DIR}/system" \
-        "${_CHECKPOINT_PREFIX}/system/" || true
+        "${CHECKPOINT_PREFIX}/system/" || true
       last_seen="${newest}"
     fi
   done
-  }
-
-_CHECKPOINT_PREFIX="${CHECKPOINT_PREFIX:-}"
-_CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
-export _CHECKPOINT_PREFIX _CHECKPOINT_POLL_SEC
 }
 
 cat > "${STAGE_DIR}/runtime.json" <<EOF
