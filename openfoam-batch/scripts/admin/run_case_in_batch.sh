@@ -20,7 +20,8 @@ gcs_cp() {
 
 SCRATCH_ROOT="${SCRATCH_ROOT:-/mnt/disks/openfoam-scratch}"
 if [[ ! -d "${SCRATCH_ROOT}" ]]; then
-  SCRATCH_ROOT="/tmp/openfoam-scratch"
+  echo "SCRATCH_ROOT=${SCRATCH_ROOT} does not exist; submit script must mount a scratch volume" >&2
+  exit 64
 fi
 
 CASE_PREFIX="gs://${BUCKET}/cases/${CASE_ID}"
