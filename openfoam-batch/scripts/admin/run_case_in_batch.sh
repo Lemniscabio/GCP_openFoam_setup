@@ -25,7 +25,8 @@ if [[ ! -d "${SCRATCH_ROOT}" ]]; then
 fi
 
 CASE_PREFIX="gs://${BUCKET}/cases/${CASE_ID}"
-RESULT_PREFIX="gs://${BUCKET}/results/${CASE_ID}/${VARIANT_ID}/${JOB_NAME}"
+TASK_INDEX="${BATCH_TASK_INDEX:-0}"
+RESULT_PREFIX="gs://${BUCKET}/results/${CASE_ID}/${VARIANT_ID}/${JOB_NAME}/task_${TASK_INDEX}"
 WORK_DIR="${SCRATCH_ROOT}/${CASE_ID}"
 STAGE_DIR="${WORK_DIR}/stage"
 CASE_DIR="${WORK_DIR}/case"

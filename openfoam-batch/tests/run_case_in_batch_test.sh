@@ -17,4 +17,21 @@ fi
 assert_contains "SCRATCH_ROOT" "$(cat "${TMPDIR_TEST}/stderr")" "stderr names the missing dir"
 teardown_tmp_workspace
 
+start_test "RESULT_PREFIX includes task_<i> segment"
+setup_tmp_workspace
+SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
+mkdir -p "${SCRATCH_ROOT_TEST}"
+
+# Build a probe by injecting an exit immediately after RESULT_PREFIX is set.
+awk '/^RESULT_PREFIX=/ { print; print "echo RESULT_PREFIX=$RESULT_PREFIX; exit 0"; next } { print }' \
+  "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh" \
+  > "${TMPDIR_TEST}/runtime_probe.sh"
+
+probe_out="$(BUCKET=tb CASE_ID=cx VARIANT_ID=fixed JOB_NAME=of-x BATCH_TASK_INDEX=2 \
+  SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
+  bash "${TMPDIR_TEST}/runtime_probe.sh" 2>"${TMPDIR_TEST}/probe.err")"
+
+assert_contains "RESULT_PREFIX=gs://tb/results/cx/fixed/of-x/task_2" "${probe_out}" "task_2 segment present"
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"
