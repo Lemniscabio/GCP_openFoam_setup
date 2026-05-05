@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fake foamDictionary: just record the call.
+set -u
+: "${FOAMDICT_LOG:?FOAMDICT_LOG must be set}"
+printf '%s\n' "foamDictionary $*" >> "${FOAMDICT_LOG}"
+exit 0
