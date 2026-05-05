@@ -171,12 +171,23 @@ gcs_cp "${STAGE_DIR}/solver.stdout.log" "${RESULT_PREFIX}/solver.stdout.log"
 gcs_cp "${STAGE_DIR}/exit_code.txt" "${RESULT_PREFIX}/exit_code.txt"
 gcs_cp "${STAGE_DIR}/result.tar.gz" "${RESULT_PREFIX}/result.tar.gz"
 
+# Always copy attempt logs (success or fail).
+gcloud storage cp "${STAGE_DIR}/runtime.json" \
+  "${RESULT_PREFIX}/attempts/${RUN_TS}/runtime.json" || true
+gcloud storage cp "${STAGE_DIR}/solver.stdout.log" \
+  "${RESULT_PREFIX}/attempts/${RUN_TS}/solver.stdout.log" || true
+gcloud storage cp "${STAGE_DIR}/exit_code.txt" \
+  "${RESULT_PREFIX}/attempts/${RUN_TS}/exit_code.txt" || true
+
 if [[ "${rc}" -eq 0 ]]; then
   date -u +%Y-%m-%dT%H:%M:%SZ > "${STAGE_DIR}/_SUCCESS"
   gcs_cp "${STAGE_DIR}/_SUCCESS" "${RESULT_PREFIX}/_SUCCESS"
+  gcloud storage rm -r "gs://${BUCKET}/checkpoints/${CASE_ID}/${VARIANT_ID}/latest/" || true
 else
   date -u +%Y-%m-%dT%H:%M:%SZ > "${STAGE_DIR}/_FAILED"
   gcs_cp "${STAGE_DIR}/_FAILED" "${RESULT_PREFIX}/_FAILED"
+  gcloud storage cp "${STAGE_DIR}/_FAILED" \
+    "${RESULT_PREFIX}/attempts/${RUN_TS}/_FAILED" || true
 fi
 
 exit "${rc}"

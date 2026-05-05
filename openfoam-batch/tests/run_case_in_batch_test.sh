@@ -178,4 +178,24 @@ unset BUCKET CASE_ID VARIANT_ID JOB_NAME BATCH_TASK_INDEX RUN_TS \
       CASE_DIR STAGE_DIR CHECKPOINT_PREFIX RESULT_PREFIX SOLVER_PGID CHECKPOINT_PID
 teardown_tmp_workspace
 
+start_test "success path includes checkpoint cleanup line"
+setup_tmp_workspace
+# Grep the script for the cleanup invocation. Full E2E is covered by Task 16.
+if ! grep -q 'storage rm -r .*checkpoints/.*latest' \
+     "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh"; then
+  printf '  FAIL [%s] cleanup rm -r line missing from runtime\n' "${TEST_NAME}" >&2
+  TEST_FAILURES=$((TEST_FAILURES+1))
+fi
+teardown_tmp_workspace
+
+start_test "always-copy-attempt-logs lines exist"
+setup_tmp_workspace
+for needle in 'attempts/.*runtime.json' 'attempts/.*solver.stdout.log' 'attempts/.*exit_code.txt'; do
+  if ! grep -qE "${needle}" "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh"; then
+    printf '  FAIL [%s] missing per-attempt copy: %s\n' "${TEST_NAME}" "${needle}" >&2
+    TEST_FAILURES=$((TEST_FAILURES+1))
+  fi
+done
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"
