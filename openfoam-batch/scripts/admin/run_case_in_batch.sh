@@ -73,6 +73,34 @@ if [[ "${RESUME}" == "1" ]]; then
   fi
 fi
 
+CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
+
+{
+checkpoint_loop() {
+  local last_seen=""
+  while true; do
+    sleep "${_CHECKPOINT_POLL_SEC:-30}"
+    local newest
+    newest=$(ls -1 "${CASE_DIR}/processor0" 2>/dev/null \
+             | grep -E '^[0-9]+(\.[0-9]+)?$' \
+             | sort -n | tail -1)
+    if [[ -n "${newest}" && "${newest}" != "${last_seen}" ]]; then
+      gcloud storage rsync --recursive \
+        "${CASE_DIR}/processor*" \
+        "${_CHECKPOINT_PREFIX}/" || true
+      gcloud storage rsync --recursive \
+        "${CASE_DIR}/system" \
+        "${_CHECKPOINT_PREFIX}/system/" || true
+      last_seen="${newest}"
+    fi
+  done
+  }
+
+_CHECKPOINT_PREFIX="${CHECKPOINT_PREFIX:-}"
+_CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
+export _CHECKPOINT_PREFIX _CHECKPOINT_POLL_SEC
+}
+
 cat > "${STAGE_DIR}/runtime.json" <<EOF
 {
   "case_id": "${CASE_ID}",
@@ -85,12 +113,20 @@ EOF
 
 cd "${CASE_DIR}"
 
+checkpoint_loop &
+CHECKPOINT_PID=$!
+
 set +e
 bash ./command.sh 2>&1 | tee "${STAGE_DIR}/solver.stdout.log"
 rc=${PIPESTATUS[0]}
 set -e
 
 printf '%s\n' "${rc}" > "${STAGE_DIR}/exit_code.txt"
+
+if [[ -n "${CHECKPOINT_PID:-}" ]]; then
+  kill "${CHECKPOINT_PID}" 2>/dev/null || true
+  wait "${CHECKPOINT_PID}" 2>/dev/null || true
+fi
 
 tar -czf "${STAGE_DIR}/result.tar.gz" -C "${CASE_DIR}" .
 

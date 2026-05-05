@@ -100,4 +100,37 @@ probe_out="$(GCLOUD_LS_HITS="gs://tb/checkpoints/cx/fixed/latest/" \
 assert_contains "RESUME_VALUE=1" "${probe_out}" "checkpoint present => RESUME=1"
 teardown_tmp_workspace
 
+start_test "checkpoint_loop function syncs when new processor0 timestep appears"
+setup_tmp_workspace
+SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
+CASE_DIR="${SCRATCH_ROOT_TEST}/cx/case"
+mkdir -p "${CASE_DIR}/processor0/0" "${CASE_DIR}/system"
+
+# Extract just the function definition (from `checkpoint_loop()` to its closing `}`).
+sed -n '/^checkpoint_loop()/,/^}/p' \
+  "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh" \
+  > "${TMPDIR_TEST}/loop.sh"
+
+# Source the function with the env vars it needs.
+# shellcheck disable=SC1091
+BUCKET=tb CASE_ID=cx VARIANT_ID=fixed CHECKPOINT_POLL_SEC=1 \
+CASE_DIR="${CASE_DIR}" \
+CHECKPOINT_PREFIX="gs://tb/checkpoints/cx/fixed/latest" \
+source "${TMPDIR_TEST}/loop.sh"
+
+checkpoint_loop &
+LOOP_PID=$!
+sleep 2  # one poll cycle: should be a no-op (no new dir relative to what's already there at startup)
+
+# Now create a "new" timestep dir and wait for the next cycle.
+mkdir -p "${CASE_DIR}/processor0/100"
+sleep 2
+
+kill "${LOOP_PID}" 2>/dev/null || true
+wait "${LOOP_PID}" 2>/dev/null || true
+
+assert_contains "rsync" "$(cat "${GCLOUD_LOG}")" "loop invoked rsync after new timestep dir appeared"
+assert_contains "checkpoints/cx/fixed/latest" "$(cat "${GCLOUD_LOG}")" "rsync target prefix"
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"
