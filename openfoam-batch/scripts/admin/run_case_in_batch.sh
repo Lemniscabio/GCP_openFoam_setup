@@ -2,6 +2,15 @@
 set -euo pipefail
 
 : "${BUCKET:?BUCKET is required}"
+if [[ -n "${CASE_ID_LIST:-}" ]]; then
+  IFS=',' read -ra _CASE_LIST <<< "${CASE_ID_LIST}"
+  _IDX="${BATCH_TASK_INDEX:-0}"
+  CASE_ID="${_CASE_LIST[${_IDX}]:-}"
+  if [[ -z "${CASE_ID}" ]]; then
+    echo "CASE_ID_LIST set but BATCH_TASK_INDEX=${_IDX} is out of bounds" >&2
+    exit 64
+  fi
+fi
 : "${CASE_ID:?CASE_ID is required}"
 : "${VARIANT_ID:?VARIANT_ID is required}"
 : "${JOB_NAME:?JOB_NAME is required}"

@@ -34,4 +34,24 @@ probe_out="$(BUCKET=tb CASE_ID=cx VARIANT_ID=fixed JOB_NAME=of-x BATCH_TASK_INDE
 assert_contains "RESULT_PREFIX=gs://tb/results/cx/fixed/of-x/task_2" "${probe_out}" "task_2 segment present"
 teardown_tmp_workspace
 
+start_test "CASE_ID_LIST resolves CASE_ID from BATCH_TASK_INDEX"
+setup_tmp_workspace
+SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
+mkdir -p "${SCRATCH_ROOT_TEST}"
+
+# Probe: insert exit immediately after the line that sets CASE_PREFIX
+# (which is computed from CASE_ID — so by then CASE_ID must be resolved).
+awk '/^CASE_PREFIX=/ { print; print "echo CASE_ID_RESOLVED=$CASE_ID; exit 0"; next } { print }' \
+  "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh" \
+  > "${TMPDIR_TEST}/probe.sh"
+
+unset CASE_ID
+probe_out="$(CASE_ID_LIST="case_a,case_b,case_c" BATCH_TASK_INDEX=1 \
+  BUCKET=tb VARIANT_ID=fixed JOB_NAME=of-x \
+  SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
+  bash "${TMPDIR_TEST}/probe.sh" 2>"${TMPDIR_TEST}/probe.err")"
+
+assert_contains "CASE_ID_RESOLVED=case_b" "${probe_out}" "index 1 -> case_b"
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"
