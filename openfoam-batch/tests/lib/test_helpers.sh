@@ -51,8 +51,10 @@ setup_tmp_workspace() {
   FOAMDICT_LOG="${TMPDIR_TEST}/foamDictionary.log"
   : > "${GCLOUD_LOG}"
   : > "${FOAMDICT_LOG}"
-  export GCLOUD_LOG FOAMDICT_LOG
-  export PATH="${STUBS_DIR}:${PATH}"
+  export TMPDIR_TEST GCLOUD_LOG FOAMDICT_LOG
+  if [[ ":${PATH}:" != *":${STUBS_DIR}:"* ]]; then
+    export PATH="${STUBS_DIR}:${PATH}"
+  fi
 }
 
 teardown_tmp_workspace() {

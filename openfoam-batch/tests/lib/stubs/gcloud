@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fake gcloud: records each invocation to ${GCLOUD_LOG} and returns success
-# (or non-zero if ${GCLOUD_FAIL_NEXT}=1, then resets).
+# (or non-zero if ${GCLOUD_FAIL_NEXT}=1; caller is responsible for
+# unsetting it after the intended failure).
 # For specific subcommands we emit canned output:
 #   "storage ls"  -> exit 0 if path is in ${GCLOUD_LS_HITS} (newline-separated), else exit 1
 #   "storage cp"  -> exit 0, record call
@@ -12,12 +13,16 @@ set -u
 : "${GCLOUD_LOG:?GCLOUD_LOG must be set}"
 printf '%s\n' "gcloud $*" >> "${GCLOUD_LOG}"
 
+# Note: GCLOUD_FAIL_NEXT is read but NOT reset here — the stub is a
+# subprocess so unsetting it would have no effect on the caller. Tests
+# that want a single-shot failure should either use one-shot env-var
+# syntax (GCLOUD_FAIL_NEXT=1 gcloud ...) or unset it themselves after
+# the failing call.
 if [[ "${GCLOUD_FAIL_NEXT:-0}" == "1" ]]; then
-  unset GCLOUD_FAIL_NEXT
   exit 1
 fi
 
-case "$1 $2" in
+case "${1:-} ${2:-}" in
   "storage ls")
     target="${3:-}"
     if [[ -n "${GCLOUD_LS_HITS:-}" ]] && grep -Fxq "${target}" <<< "${GCLOUD_LS_HITS}"; then

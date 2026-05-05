@@ -10,7 +10,7 @@ for f in "${DIR}"/*_test.sh; do
   total_failures=$((total_failures + rc))
 done
 if [[ "${total_failures}" -gt 0 ]]; then
-  printf '\nFAILED: %d test files reported failures\n' "${total_failures}" >&2
+  printf '\nFAILED: %d total failure(s) across test files\n' "${total_failures}" >&2
   exit 1
 fi
 printf '\nAll test files passed.\n'
