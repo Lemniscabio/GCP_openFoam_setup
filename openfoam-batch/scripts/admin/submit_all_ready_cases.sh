@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Env vars passed through to each submit_one_case.sh invocation:
+#   FORCE_SUBMIT, PROVISIONING_MODEL, MAX_RETRY_COUNT,
+#   SCRATCH_DISK_TYPE, SCRATCH_DISK_GB, CHECKPOINT_POLL_SEC, DRY_RUN.
+
 if [[ $# -ne 9 ]]; then
   echo "Usage: $0 PROJECT_ID REGION IMAGE_URI MACHINE_TYPE CPU_MILLI MPI_RANKS MEMORY_MIB LOCAL_SSD_COUNT MAX_RUN_DURATION" >&2
   exit 1
