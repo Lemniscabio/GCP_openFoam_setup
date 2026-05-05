@@ -1130,7 +1130,7 @@ prefix. Failure additionally writes _FAILED inside the attempt dir."
 
 ## Task 10 — Phase C: Spot/Retry/InstanceTermination JSON In submit_one_case.sh
 
-Add `provisioningModel`, `maxRetryCount`, `lifecyclePolicies` (retry on exit 50001), `instanceTermination` (120 s) to the Batch JSON.
+Add `provisioningModel`, `maxRetryCount`, and `lifecyclePolicies` (retry on exit 50001) to the Batch JSON. No `instanceTermination` block — Batch does not expose graceful-shutdown.
 
 **Files:**
 - Modify: `openfoam-batch/scripts/admin/submit_one_case.sh`
@@ -1243,7 +1243,7 @@ git add openfoam-batch/scripts/admin/submit_one_case.sh \
 git commit -m "feat(submit): add Spot, retry, and 120s graceful-shutdown to Batch JSON
 
 PROVISIONING_MODEL (default STANDARD, set SPOT to enable spot),
-MAX_RETRY_COUNT (default 3), PREEMPTION_DELAY (default 120s).
+MAX_RETRY_COUNT (default 3).
 A lifecyclePolicy retries on exit 50001 (the runtime's preemption
 exit code)."
 ```
@@ -1268,7 +1268,7 @@ In `openfoam-batch/scripts/admin/submit_all_ready_cases.sh`, after the `set -euo
 
 ```bash
 # Env vars passed through to each submit_one_case.sh invocation:
-#   FORCE_SUBMIT, PROVISIONING_MODEL, MAX_RETRY_COUNT, PREEMPTION_DELAY,
+#   FORCE_SUBMIT, PROVISIONING_MODEL, MAX_RETRY_COUNT,
 #   SCRATCH_DISK_TYPE, SCRATCH_DISK_GB, CHECKPOINT_POLL_SEC, DRY_RUN.
 ```
 
@@ -1371,7 +1371,6 @@ fi
 
 PROVISIONING_MODEL="${PROVISIONING_MODEL:-STANDARD}"
 MAX_RETRY_COUNT="${MAX_RETRY_COUNT:-3}"
-PREEMPTION_DELAY="${PREEMPTION_DELAY:-120s}"
 SCRATCH_DISK_TYPE="${SCRATCH_DISK_TYPE:-pd-ssd}"
 SCRATCH_DISK_GB="${SCRATCH_DISK_GB:-200}"
 
@@ -1498,10 +1497,7 @@ ${VOLUMES_BLOCK}
 ${DISKS_BLOCK}
         }
       }
-    ],
-    "instanceTermination": {
-      "preemptionDelay": "${PREEMPTION_DELAY}"
-    }
+    ]
   },
   "logsPolicy": { "destination": "CLOUD_LOGGING" },
   "labels": { "app": "openfoam" }
@@ -1615,7 +1611,7 @@ PROVISIONING_MODEL=SPOT MAX_RETRY_COUNT=3 ./scripts/admin/submit_one_case.sh ...
 
 Behavior on a Spot VM:
 
-- Graceful shutdown window is set to 120 seconds via `instanceTermination.preemptionDelay`.
+- Graceful shutdown window is whatever GCP Batch's default is for Spot (currently ~30 s). Batch's `InstancePolicy` does not expose the longer 120 s window; the design's continuous rsync is sized for 30 s.
 - The runtime continuously rsyncs solver state to `gs://<bucket>/checkpoints/CASE_ID/VARIANT_ID/latest/` (event-driven, additive — no tar/gzip during the run).
 - On preemption (SIGTERM): runtime kills the solver, runs one final rsync, writes `preempted.json`, copies attempt logs to `results/.../task_<i>/attempts/<RUN_TS>/`, exits 50001.
 - A `lifecyclePolicies` rule classifies exit 50001 as `RETRY_TASK`; Batch reschedules on a fresh VM up to `maxRetryCount` times.
@@ -1662,7 +1658,6 @@ New env-var knobs (Phase C/D additions):
 
 - `PROVISIONING_MODEL` — `STANDARD` (default) or `SPOT`.
 - `MAX_RETRY_COUNT` — Batch task retries on top of the original attempt; default `3`.
-- `PREEMPTION_DELAY` — graceful shutdown window for Spot VMs; default `120s`.
 - `SCRATCH_DISK_TYPE` — when `LOCAL_SSD_COUNT=0`, the type of the attached scratch PD; default `pd-ssd`.
 - `SCRATCH_DISK_GB` — scratch PD size when `LOCAL_SSD_COUNT=0`; default `200`.
 - `CHECKPOINT_POLL_SEC` — runtime poll interval for new timestep dirs; default `30`.
