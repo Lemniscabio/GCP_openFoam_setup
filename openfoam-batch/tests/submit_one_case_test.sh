@@ -38,4 +38,27 @@ assert_eq "pd-balanced" "$(echo "${JSON}" | jq -r '.allocationPolicy.instances[0
 assert_eq "500" "$(echo "${JSON}" | jq -r '.allocationPolicy.instances[0].policy.disks[0].newDisk.sizeGb')" "size override"
 teardown_tmp_workspace
 
+start_test "default JSON has STANDARD provisioning, maxRetryCount, lifecyclePolicy"
+setup_tmp_workspace
+JSON="$(GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
+  project-test us-central1 docker.io/test:1 \
+  case_test fixed c2d-standard-16 \
+  16000 8 65536 1 43200s 2>"${TMPDIR_TEST}/stderr")"
+assert_eq "STANDARD" "$(echo "${JSON}" | jq -r '.allocationPolicy.instances[0].policy.provisioningModel')" "default STANDARD"
+assert_eq "3" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.maxRetryCount')" "default maxRetryCount"
+assert_eq "50001" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.lifecyclePolicies[0].actionCondition.exitCodes[0]')" "retry on 50001"
+assert_eq "RETRY_TASK" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.lifecyclePolicies[0].action')" "RETRY_TASK action"
+teardown_tmp_workspace
+
+start_test "PROVISIONING_MODEL=SPOT and MAX_RETRY_COUNT override"
+setup_tmp_workspace
+JSON="$(PROVISIONING_MODEL=SPOT MAX_RETRY_COUNT=5 \
+  GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
+  project-test us-central1 docker.io/test:1 \
+  case_test fixed c2d-standard-16 \
+  16000 8 65536 1 43200s 2>"${TMPDIR_TEST}/stderr")"
+assert_eq "SPOT" "$(echo "${JSON}" | jq -r '.allocationPolicy.instances[0].policy.provisioningModel')" "SPOT"
+assert_eq "5" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.maxRetryCount')" "retry override"
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"

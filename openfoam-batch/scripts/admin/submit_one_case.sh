@@ -50,6 +50,8 @@ MPI_RANKS="${MPI_RANKS:-$(ask "MPI ranks" "8")}"
 MEMORY_MIB="${MEMORY_MIB:-$(ask "Memory MiB" "65536")}"
 LOCAL_SSD_COUNT="${LOCAL_SSD_COUNT:-$(ask "Local SSD count" "1")}"
 MAX_RUN_DURATION="${MAX_RUN_DURATION:-$(ask "Max run duration" "43200s")}"
+PROVISIONING_MODEL="${PROVISIONING_MODEL:-STANDARD}"
+MAX_RETRY_COUNT="${MAX_RETRY_COUNT:-3}"
 
 # Edit this one line if the bucket changes.
 GCS_BUCKET="openfoam_cases"
@@ -162,6 +164,13 @@ cat > "${CONFIG_PATH}" <<EOF
           "memoryMib": ${MEMORY_MIB}
         },
         "maxRunDuration": "${MAX_RUN_DURATION}",
+        "maxRetryCount": ${MAX_RETRY_COUNT},
+        "lifecyclePolicies": [
+          {
+            "actionCondition": { "exitCodes": [50001] },
+            "action": "RETRY_TASK"
+          }
+        ],
 ${VOLUMES_BLOCK}
       }
     }
@@ -171,6 +180,7 @@ ${VOLUMES_BLOCK}
       {
         "policy": {
           "machineType": "${MACHINE_TYPE}",
+          "provisioningModel": "${PROVISIONING_MODEL}",
 ${DISKS_BLOCK}
         }
       }
