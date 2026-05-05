@@ -59,6 +59,20 @@ tar -xzf "${STAGE_DIR}/case.tar.gz" -C "${CASE_DIR}"
 cp "${STAGE_DIR}/command.sh" "${CASE_DIR}/command.sh"
 chmod +x "${CASE_DIR}/command.sh"
 
+CHECKPOINT_PREFIX="gs://${BUCKET}/checkpoints/${CASE_ID}/${VARIANT_ID}/latest"
+RESUME=0
+if gcloud storage ls "${CHECKPOINT_PREFIX}/" >/dev/null 2>&1; then
+  RESUME=1
+fi
+
+if [[ "${RESUME}" == "1" ]]; then
+  echo "Resuming from checkpoint ${CHECKPOINT_PREFIX}"
+  gcloud storage rsync --recursive "${CHECKPOINT_PREFIX}/" "${CASE_DIR}/" || true
+  if command -v foamDictionary >/dev/null 2>&1; then
+    foamDictionary "${CASE_DIR}/system/controlDict" -entry startFrom -set latestTime || true
+  fi
+fi
+
 cat > "${STAGE_DIR}/runtime.json" <<EOF
 {
   "case_id": "${CASE_ID}",
