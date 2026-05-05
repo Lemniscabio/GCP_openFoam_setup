@@ -140,4 +140,42 @@ assert_contains "checkpoints/cx/fixed/latest" "$(cat "${GCLOUD_LOG}")" "rsync ta
 unset BUCKET CASE_ID VARIANT_ID CHECKPOINT_POLL_SEC CASE_DIR CHECKPOINT_PREFIX
 teardown_tmp_workspace
 
+start_test "on_sigterm: final rsync + preempted.json + exit 50001"
+setup_tmp_workspace
+SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
+CASE_DIR="${SCRATCH_ROOT_TEST}/cx/case"
+STAGE_DIR="${SCRATCH_ROOT_TEST}/cx/stage"
+mkdir -p "${CASE_DIR}/processor0/100" "${CASE_DIR}/system" "${STAGE_DIR}"
+echo "log so far" > "${STAGE_DIR}/solver.stdout.log"
+echo "{}" > "${STAGE_DIR}/runtime.json"
+
+# Extract the on_sigterm function definition.
+sed -n '/^on_sigterm()/,/^}/p' \
+  "${REPO_ROOT}/openfoam-batch/scripts/admin/run_case_in_batch.sh" \
+  > "${TMPDIR_TEST}/trap.sh"
+
+export BUCKET=tb CASE_ID=cx VARIANT_ID=fixed JOB_NAME=of-x BATCH_TASK_INDEX=0
+export RUN_TS=20260505T000000Z
+export CASE_DIR STAGE_DIR
+export CHECKPOINT_PREFIX="gs://tb/checkpoints/cx/fixed/latest"
+export RESULT_PREFIX="gs://tb/results/cx/fixed/of-x/task_0"
+export SOLVER_PGID="" CHECKPOINT_PID=""
+
+# shellcheck disable=SC1091
+source "${TMPDIR_TEST}/trap.sh"
+
+# Run in subshell so exit doesn't kill the test.
+( on_sigterm ) || rc=$?
+
+# 50001 % 256 = 81; POSIX exit codes are 8-bit, so the subshell returns 81.
+# Production exit 50001 is what Google Cloud Batch reads from the process.
+assert_eq "81" "${rc:-}" "exit code 81 (50001 % 256 — Batch reads 50001 from its agent)"
+assert_contains "rsync" "$(cat "${GCLOUD_LOG}")" "final rsync invoked"
+assert_contains "preempted.json" "$(cat "${GCLOUD_LOG}")" "preempted.json uploaded"
+assert_contains "attempts/20260505T000000Z" "$(cat "${GCLOUD_LOG}")" "logs copied to attempts dir"
+
+unset BUCKET CASE_ID VARIANT_ID JOB_NAME BATCH_TASK_INDEX RUN_TS \
+      CASE_DIR STAGE_DIR CHECKPOINT_PREFIX RESULT_PREFIX SOLVER_PGID CHECKPOINT_PID
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"

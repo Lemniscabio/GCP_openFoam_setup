@@ -41,6 +41,7 @@ STAGE_DIR="${WORK_DIR}/stage"
 CASE_DIR="${WORK_DIR}/case"
 
 mkdir -p "${STAGE_DIR}" "${CASE_DIR}"
+RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 echo "Downloading case inputs from ${CASE_PREFIX}"
 gcs_cp "${CASE_PREFIX}/case.tar.gz" "${STAGE_DIR}/case.tar.gz"
@@ -95,6 +96,42 @@ checkpoint_loop() {
   done
 }
 
+on_sigterm() {
+  trap '' TERM INT
+  if [[ -n "${SOLVER_PGID:-}" ]]; then
+    kill -TERM -"${SOLVER_PGID}" 2>/dev/null || true
+    wait "${SOLVER_PID:-0}" 2>/dev/null || true
+  fi
+  if [[ -n "${CHECKPOINT_PID:-}" ]]; then
+    kill "${CHECKPOINT_PID}" 2>/dev/null || true
+  fi
+  gcloud storage rsync --recursive \
+    "${CASE_DIR}/processor*" \
+    "${CHECKPOINT_PREFIX}/" || true
+  gcloud storage rsync --recursive \
+    "${CASE_DIR}/system" \
+    "${CHECKPOINT_PREFIX}/system/" || true
+  cat > "${STAGE_DIR}/preempted.json" <<EOF2
+  {
+    "job_name": "${JOB_NAME}",
+    "task_index": "${BATCH_TASK_INDEX:-0}",
+    "attempt_ts": "${RUN_TS}",
+    "reason": "preempted"
+  }
+EOF2
+  gcloud storage cp "${STAGE_DIR}/preempted.json" \
+    "${CHECKPOINT_PREFIX}/preempted.json" || true
+  if [[ -f "${STAGE_DIR}/solver.stdout.log" ]]; then
+    gcloud storage cp "${STAGE_DIR}/solver.stdout.log" \
+      "${RESULT_PREFIX}/attempts/${RUN_TS}/solver.stdout.log" || true
+  fi
+  if [[ -f "${STAGE_DIR}/runtime.json" ]]; then
+    gcloud storage cp "${STAGE_DIR}/runtime.json" \
+      "${RESULT_PREFIX}/attempts/${RUN_TS}/runtime.json" || true
+  fi
+  exit 50001
+}
+
 cat > "${STAGE_DIR}/runtime.json" <<EOF
 {
   "case_id": "${CASE_ID}",
@@ -109,10 +146,14 @@ cd "${CASE_DIR}"
 
 checkpoint_loop &
 CHECKPOINT_PID=$!
+trap on_sigterm TERM INT
 
 set +e
-bash ./command.sh 2>&1 | tee "${STAGE_DIR}/solver.stdout.log"
-rc=${PIPESTATUS[0]}
+setsid bash ./command.sh 2>&1 | tee "${STAGE_DIR}/solver.stdout.log" &
+SOLVER_PID=$!
+SOLVER_PGID=$(ps -o pgid= -p "${SOLVER_PID}" | tr -d ' ' || echo "")
+wait "${SOLVER_PID}"
+rc=$?
 set -e
 
 printf '%s\n' "${rc}" > "${STAGE_DIR}/exit_code.txt"
