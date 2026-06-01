@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+canonical_case_id() {
+  local value="$1"
+  if [[ "${value}" =~ ^[0-9]+$ ]]; then printf 'case_%04d\n' "$((10#${value}))"; return; fi
+  printf '%s\n' "${value}"
+}
+
+: "${BUCKET:?BUCKET is required}"
+if [[ -n "${CASE_ID_LIST:-}" ]]; then
+  IFS=',' read -ra _CASE_LIST <<< "${CASE_ID_LIST}"
+  _IDX="${BATCH_TASK_INDEX:-0}"
+  CASE_ID="$(canonical_case_id "${_CASE_LIST[${_IDX}]:-}")"
+  [[ -n "${CASE_ID}" ]] || { echo "BATCH_TASK_INDEX=${_IDX} out of bounds" >&2; exit 64; }
+fi
+: "${CASE_ID:?CASE_ID is required}"
+CASE_ID="$(canonical_case_id "${CASE_ID}")"
+: "${VARIANT_ID:?VARIANT_ID is required}"
+: "${JOB_NAME:?JOB_NAME is required}"
+SCRATCH_ROOT="${SCRATCH_ROOT:-/mnt/disks/openfoam-scratch}"
+[[ -d "${SCRATCH_ROOT}" ]] || { echo "SCRATCH_ROOT=${SCRATCH_ROOT} missing" >&2; exit 64; }
+
+CASE_PREFIX="gs://${BUCKET}/cases/${CASE_ID}"
+TASK_INDEX="${BATCH_TASK_INDEX:-0}"
+RESULT_PREFIX="gs://${BUCKET}/results/${CASE_ID}/${VARIANT_ID}/${JOB_NAME}/task_${TASK_INDEX}"
+CHECKPOINT_PREFIX="gs://${BUCKET}/checkpoints/${CASE_ID}/${VARIANT_ID}/latest"
+WORK_DIR="${SCRATCH_ROOT}/${CASE_ID}"; STAGE_DIR="${WORK_DIR}/stage"; CASE_DIR="${WORK_DIR}/case"
+mkdir -p "${STAGE_DIR}" "${CASE_DIR}"
+RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
+
+echo "Downloading case tree from ${CASE_PREFIX}/case/"
+gcloud storage rsync --recursive "${CASE_PREFIX}/case/" "${CASE_DIR}/"   # tree, not tar.gz
+gcloud storage cp "${CASE_PREFIX}/command.sh" "${CASE_DIR}/command.sh"
+gcloud storage cp "${CASE_PREFIX}/manifest.json" "${STAGE_DIR}/manifest.json"
+chmod +x "${CASE_DIR}/command.sh"
+
+# resume from checkpoint if present
+if gcloud storage ls "${CHECKPOINT_PREFIX}/" >/dev/null 2>&1; then
+  echo "Resuming from ${CHECKPOINT_PREFIX}"
+  gcloud storage rsync --recursive "${CHECKPOINT_PREFIX}/" "${CASE_DIR}/" || true
+  command -v foamDictionary >/dev/null 2>&1 && \
+    foamDictionary "${CASE_DIR}/system/controlDict" -entry startFrom -set latestTime || true
+fi
+
+CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
+sync_checkpoint() {   # FIXED: iterate real processor dirs; no quoted-glob passed to gcloud
+  local p name
+  for p in "${CASE_DIR}"/processor*/; do
+    [[ -d "${p}" ]] || continue
+    name="$(basename "${p}")"
+    gcloud storage rsync --recursive "${p}" "${CHECKPOINT_PREFIX}/${name}/" || true
+  done
+  [[ -d "${CASE_DIR}/system" ]] && \
+    gcloud storage rsync --recursive "${CASE_DIR}/system" "${CHECKPOINT_PREFIX}/system/" || true
+}
+
+checkpoint_loop() {
+  local last="" newest
+  while true; do
+    sleep "${CHECKPOINT_POLL_SEC}"
+    newest="$(ls -1 "${CASE_DIR}/processor0" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -n | tail -1)"
+    if [[ -n "${newest}" && "${newest}" != "${last}" ]]; then sync_checkpoint; last="${newest}"; fi
+  done
+}
+
+# Minimal stop handler: flush a final checkpoint so a manual stop / interruption can resume.
+# NOT preemption-specific: no preempted.json, no exit 50001.
+on_term() {
+  trap '' TERM INT
+  [[ -n "${SOLVER_PGID:-}" ]] && kill -TERM -"${SOLVER_PGID}" 2>/dev/null || true
+  [[ -n "${CHECKPOINT_PID:-}" ]] && kill "${CHECKPOINT_PID}" 2>/dev/null || true
+  sync_checkpoint
+  exit 143
+}
+
+cat > "${STAGE_DIR}/runtime.json" <<EOF
+{"case_id":"${CASE_ID}","variant_id":"${VARIANT_ID}","job_name":"${JOB_NAME}","hostname":"$(hostname)","started_at_utc":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+
+cd "${CASE_DIR}"
+checkpoint_loop & CHECKPOINT_PID=$!
+trap on_term TERM INT
+
+set +e
+setsid bash ./command.sh 2>&1 | tee "${STAGE_DIR}/solver.stdout.log" &
+SOLVER_PID=$!
+SOLVER_PGID="$(ps -o pgid= -p "${SOLVER_PID}" | tr -d ' ' || echo "")"
+wait "${SOLVER_PID}"; rc=$?
+set -e
+
+printf '%s\n' "${rc}" > "${STAGE_DIR}/exit_code.txt"
+[[ -n "${CHECKPOINT_PID:-}" ]] && { kill "${CHECKPOINT_PID}" 2>/dev/null || true; wait "${CHECKPOINT_PID}" 2>/dev/null || true; }
+
+# results tarball — UNCHANGED behavior
+tar -czf "${STAGE_DIR}/result.tar.gz" -C "${CASE_DIR}" .
+gcloud storage cp "${STAGE_DIR}/manifest.json"      "${RESULT_PREFIX}/manifest.json"
+gcloud storage cp "${STAGE_DIR}/runtime.json"       "${RESULT_PREFIX}/runtime.json"
+gcloud storage cp "${STAGE_DIR}/solver.stdout.log"  "${RESULT_PREFIX}/solver.stdout.log"
+gcloud storage cp "${STAGE_DIR}/exit_code.txt"      "${RESULT_PREFIX}/exit_code.txt"
+gcloud storage cp "${STAGE_DIR}/result.tar.gz"      "${RESULT_PREFIX}/result.tar.gz"
+
+if [[ "${rc}" -eq 0 ]]; then
+  date -u +%Y-%m-%dT%H:%M:%SZ > "${STAGE_DIR}/_SUCCESS"
+  gcloud storage cp "${STAGE_DIR}/_SUCCESS" "${RESULT_PREFIX}/_SUCCESS"
+  gcloud storage rm -r "${CHECKPOINT_PREFIX}/" || true
+else
+  date -u +%Y-%m-%dT%H:%M:%SZ > "${STAGE_DIR}/_FAILED"
+  gcloud storage cp "${STAGE_DIR}/_FAILED" "${RESULT_PREFIX}/_FAILED"
+fi
+exit "${rc}"
