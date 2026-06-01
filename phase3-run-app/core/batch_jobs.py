@@ -82,3 +82,20 @@ class BatchJobBuilder:
             "logsPolicy": {"destination": "CLOUD_LOGGING"},
             "labels": {"app": "openfoam"},
         }
+
+from google.cloud import batch_v1  # type: ignore
+from google.protobuf import json_format  # type: ignore
+
+class BatchSubmitter:
+    """Submits a built spec dict via the Batch API."""
+    def __init__(self, project_id: str, region: str) -> None:
+        self._project = project_id
+        self._region = region
+        self._client = batch_v1.BatchServiceClient()
+
+    def submit(self, job_name: str, spec: dict) -> str:
+        job = json_format.ParseDict(spec, batch_v1.Job()._pb)
+        parent = f"projects/{self._project}/locations/{self._region}"
+        created = self._client.create_job(batch_v1.CreateJobRequest(
+            parent=parent, job_id=job_name, job=batch_v1.Job.wrap(job)))
+        return created.name

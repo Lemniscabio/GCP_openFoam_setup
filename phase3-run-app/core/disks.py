@@ -20,6 +20,6 @@ def build_disk_spec(local_ssd_count: int = 1, scratch_disk_type: str = "pd-ssd",
     volumes = [{
         "deviceName": f"{_DEVICE}-1",
         "mountPath": MOUNT_PATH,
-        "mountOptions": "rw,async",
+        "mountOptions": ["rw", "async"],  # Batch proto field is repeated (list), not a string
     }]
     return {"disks": disks, "volumes": volumes}
