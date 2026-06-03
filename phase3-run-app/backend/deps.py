@@ -37,7 +37,11 @@ def _access_token() -> str:
 
 
 def case_repo() -> CaseRepository:
-    return CaseRepository(GcsStorage(settings().bucket))
+    return CaseRepository(storage())
+
+
+def storage() -> GcsStorage:
+    return GcsStorage(settings().bucket)
 
 
 def url_service() -> SignedUrlService:
@@ -61,4 +65,4 @@ def submitter() -> BatchSubmitter:
 
 def status_service() -> RunStatusService:
     s = settings()
-    return RunStatusService(batch_v1.BatchServiceClient(), GcsStorage(s.bucket), s.project_id, s.region)
+    return RunStatusService(batch_v1.BatchServiceClient(), storage(), s.project_id, s.region)
