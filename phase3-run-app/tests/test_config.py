@@ -7,6 +7,11 @@ def test_settings_defaults():
     # full pullable ref (registry/repo:tag), pinned to OpenFOAM v12
     assert "/openfoam:12" in s.image_uri and s.image_uri.endswith(":12.0.0")
 
+def test_auth_defaults():
+    s = Settings()
+    assert s.allowed_domain == "lemnisca.bio"
+    assert s.oauth_client_id == ""
+
 def test_machine_catalog_is_all_c2d_highcpu():
     names = [m["name"] for m in MACHINE_CATALOG]
     assert names == ["c2d-highcpu-2","c2d-highcpu-4","c2d-highcpu-8",

@@ -3,8 +3,8 @@ import json
 
 from fastapi import APIRouter, Depends
 
+from backend.auth import User, current_user
 from backend.deps import case_repo, storage, url_service
-from backend.iap import User, current_user
 from backend.schemas import AllocateReq, FinalizeReq
 
 router = APIRouter()

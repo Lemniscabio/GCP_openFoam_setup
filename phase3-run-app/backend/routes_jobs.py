@@ -2,8 +2,8 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from backend.auth import User, current_user
 from backend.deps import builder, status_service, submitter
-from backend.iap import User, current_user
 from backend.schemas import SubmitReq
 from core.machines import MachineCatalog
 from core.naming import build_job_name, canonical_case_id
