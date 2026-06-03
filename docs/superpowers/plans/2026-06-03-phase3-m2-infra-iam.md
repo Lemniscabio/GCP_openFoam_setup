@@ -224,9 +224,11 @@ Expected: backend has `batch.jobsEditor`; job has `batch.agentReporter`+`logging
 
 Keyless GitHub→GCP auth for CI deploys. One-time; the finicky parts are the attribute condition and the `principalSet` string.
 
+⚠️ **Shared-project note:** a pool named `github-pool` already exists in this project — it belongs to **BioHermes** (provider locked to `nikhil-lemn/BioHermes`). **Do not touch it.** We use our own namespaced pool `of-github-pool`.
+
 - [ ] **Step 1: Create the pool**
 ```bash
-gcloud iam workload-identity-pools create github-pool \
+gcloud iam workload-identity-pools create of-github-pool \
   --location=global --display-name="GitHub Actions pool" \
   --project=project-688a4c78-5d5b-45b3-b5d
 ```
@@ -235,7 +237,7 @@ gcloud iam workload-identity-pools create github-pool \
 Replace `Lemniscabio/https://github.com/Lemniscabio/GCP_openFoam_setup` with your actual repo:
 ```bash
 gcloud iam workload-identity-pools providers create-oidc github-provider \
-  --location=global --workload-identity-pool=github-pool \
+  --location=global --workload-identity-pool=of-github-pool \
   --display-name="GitHub provider" \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
@@ -259,16 +261,16 @@ Replace `Lemniscabio/https://github.com/Lemniscabio/GCP_openFoam_setup`:
 gcloud iam service-accounts add-iam-policy-binding \
   of-ci-deployer@project-688a4c78-5d5b-45b3-b5d.iam.gserviceaccount.com \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/746208330214/locations/global/workloadIdentityPools/github-pool/attribute.repository/Lemniscabio/GCP_openFoam_setup" \
+  --member="principalSet://iam.googleapis.com/projects/746208330214/locations/global/workloadIdentityPools/of-github-pool/attribute.repository/Lemniscabio/GCP_openFoam_setup" \
   --project=project-688a4c78-5d5b-45b3-b5d
 ```
 - [ ] **Step 5 (verify):**
 ```bash
 gcloud iam workload-identity-pools providers describe github-provider \
-  --location=global --workload-identity-pool=github-pool \
+  --location=global --workload-identity-pool=of-github-pool \
   --project=project-688a4c78-5d5b-45b3-b5d --format="value(attributeCondition)"
 ```
-Expected: prints `assertion.repository=='GH_OWNER/GH_REPO'`. (The GitHub Actions workflow YAML that consumes this is written in M3's CI task — it uses provider resource `projects/746208330214/locations/global/workloadIdentityPools/github-pool/providers/github-provider` and SA `of-ci-deployer@…`.)
+Expected: prints `assertion.repository=='Lemniscabio/GCP_openFoam_setup'`. (The GitHub Actions workflow YAML that consumes this is written in M3's CI task — it uses provider resource `projects/746208330214/locations/global/workloadIdentityPools/of-github-pool/providers/github-provider` and SA `of-ci-deployer@…`.)
 
 ---
 
