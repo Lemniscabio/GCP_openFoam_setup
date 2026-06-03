@@ -11,8 +11,10 @@ app.include_router(cases_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 
 
-@app.get("/healthz")
-def healthz():
+@app.get("/health")
+def health():
+    # NB: Cloud Run's edge reserves the exact path /healthz (never reaches the
+    # container), so the health route is /health.
     return {"ok": True}
 
 

@@ -13,4 +13,4 @@ def test_api_requires_token(monkeypatch):
     c = TestClient(backend.main.app)
     r = c.get("/api/cases")
     assert r.status_code == 401
-    assert c.get("/healthz").status_code == 200
+    assert c.get("/health").status_code == 200
