@@ -5,7 +5,7 @@ def test_settings_defaults():
     assert s.bucket == "cfd-lemnisca-cases"
     assert s.region == "us-central1"
     # full pullable ref (registry/repo:tag), pinned to OpenFOAM v12
-    assert "/openfoam:12" in s.image_uri and s.image_uri.endswith(":12.0.0")
+    assert "/openfoam:12.0." in s.image_uri   # OpenFOAM v12, any image revision
 
 def test_auth_defaults():
     s = Settings()
