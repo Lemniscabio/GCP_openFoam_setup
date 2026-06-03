@@ -16,7 +16,7 @@
 - AR image (target) = `us-central1-docker.pkg.dev/project-688a4c78-5d5b-45b3-b5d/openfoam/openfoam:12.0.0`
 
 **You must supply two values before starting** (write them here):
-- `GH_OWNER/GH_REPO` = `__________/__________`  (the GitHub repo that will deploy via Actions)
+- `GH_OWNER/GH_REPO` = `Lemniscabio/GCP_openFoam_setup`  (the GitHub repo that will deploy via Actions; case-sensitive)
 - App access = **all of `lemnisca.bio`** (decided 2026-06-03) → M3 binds `domain:lemnisca.bio` to IAP; no group needed.
 
 **What is NOT in M2 (deferred to M3, because it needs the deployed Cloud Run service):**
@@ -232,14 +232,14 @@ gcloud iam workload-identity-pools create github-pool \
 ```
 - [ ] **Step 2: Create the GitHub OIDC provider (locked to your repo)**
 
-Replace `GH_OWNER/GH_REPO` with your actual repo:
+Replace `Lemniscabio/https://github.com/Lemniscabio/GCP_openFoam_setup` with your actual repo:
 ```bash
 gcloud iam workload-identity-pools providers create-oidc github-provider \
   --location=global --workload-identity-pool=github-pool \
   --display-name="GitHub provider" \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition="assertion.repository=='GH_OWNER/GH_REPO'" \
+  --attribute-condition="assertion.repository=='Lemniscabio/GCP_openFoam_setup'" \
   --project=project-688a4c78-5d5b-45b3-b5d
 ```
 - [ ] **Step 3: Create the deploy SA + its deploy roles**
@@ -259,7 +259,7 @@ Replace `Lemniscabio/https://github.com/Lemniscabio/GCP_openFoam_setup`:
 gcloud iam service-accounts add-iam-policy-binding \
   of-ci-deployer@project-688a4c78-5d5b-45b3-b5d.iam.gserviceaccount.com \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/746208330214/locations/global/workloadIdentityPools/github-pool/attribute.repository/GH_OWNER/GH_REPO" \
+  --member="principalSet://iam.googleapis.com/projects/746208330214/locations/global/workloadIdentityPools/github-pool/attribute.repository/Lemniscabio/GCP_openFoam_setup" \
   --project=project-688a4c78-5d5b-45b3-b5d
 ```
 - [ ] **Step 5 (verify):**
