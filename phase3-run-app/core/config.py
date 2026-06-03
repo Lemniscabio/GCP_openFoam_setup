@@ -22,7 +22,7 @@ class Settings:
     bucket: str = os.environ.get("OF_BUCKET", "cfd-lemnisca-cases")
     # Full pullable ref so `of run` needs no OF_IMAGE_URI override. Private
     # Artifact Registry in the dedicated cfd-lemnisca project; OF_IMAGE_URI overrides.
-    image_uri: str = os.environ.get("OF_IMAGE_URI", "us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.0")
+    image_uri: str = os.environ.get("OF_IMAGE_URI", "us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.1")
     job_service_account: str = os.environ.get("OF_JOB_SA", "of-batch-job@cfd-lemnisca.iam.gserviceaccount.com")
     backend_service_account: str = os.environ.get("OF_BACKEND_SA", "of-batch-backend@cfd-lemnisca.iam.gserviceaccount.com")
     oauth_client_id: str = os.environ.get("OF_OAUTH_CLIENT_ID", "")

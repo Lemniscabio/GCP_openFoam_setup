@@ -61,7 +61,7 @@ def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version):
     base = f"gs://{settings.bucket}/cases/{cid}"
     # rsync the case tree (no tarring)
     subprocess.run(["gcloud", "storage", "rsync", "--recursive", case_dir, f"{base}/case/"], check=True)
-    subprocess.run(["gcloud", "storage", "cp", command_sh, f"{base}/command.sh"], check=True)
+    subprocess.run(["gcloud", "storage", "cp", command_sh, f"{base}/case/command.sh"], check=True)
     manifest = json.dumps({
         "case_id": cid, "solver_family": "openfoam", "openfoam_version": openfoam_version,
         "uploaded_at_utc": datetime.datetime.utcnow().isoformat() + "Z",

@@ -30,10 +30,9 @@ mkdir -p "${STAGE_DIR}" "${CASE_DIR}"
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 echo "Downloading case tree from ${CASE_PREFIX}/case/"
-gcloud storage rsync --recursive "${CASE_PREFIX}/case/" "${CASE_DIR}/"   # tree, not tar.gz
-gcloud storage cp "${CASE_PREFIX}/command.sh" "${CASE_DIR}/command.sh"
+gcloud storage rsync --recursive "${CASE_PREFIX}/case/" "${CASE_DIR}/"   # tree incl. command.sh
 gcloud storage cp "${CASE_PREFIX}/manifest.json" "${STAGE_DIR}/manifest.json"
-chmod +x "${CASE_DIR}/command.sh"
+chmod +x "${CASE_DIR}/command.sh"   # command.sh comes down inside the case tree
 
 # resume from checkpoint if present
 if gcloud storage ls "${CHECKPOINT_PREFIX}/" >/dev/null 2>&1; then
