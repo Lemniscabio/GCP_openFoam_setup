@@ -6,7 +6,7 @@ export class ApiClient {
   private base: string;
   private token: () => string | null;
   private f: typeof fetch;
-  constructor(base: string, token: () => string | null, f: typeof fetch = fetch) {
+  constructor(base: string, token: () => string | null, f: typeof fetch = fetch.bind(globalThis)) {
     this.base = base;
     this.token = token;
     this.f = f;

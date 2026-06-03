@@ -28,7 +28,7 @@ export async function runPool<T>(
 }
 
 // Upload one file to its signed PUT URL.
-export async function putFile(url: string, file: File, f: typeof fetch = fetch): Promise<void> {
+export async function putFile(url: string, file: File, f: typeof fetch = fetch.bind(globalThis)): Promise<void> {
   const r = await f(url, { method: "PUT", body: file });
   if (!r.ok) throw new Error(`PUT ${r.status}`);
 }
