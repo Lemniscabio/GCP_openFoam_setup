@@ -4,7 +4,8 @@ def test_settings_defaults():
     s = Settings()
     assert s.bucket == "of-cases"
     assert s.region == "us-central1"
-    assert s.image_uri.startswith("openfoam:12")
+    # full pullable ref (registry/repo:tag), pinned to OpenFOAM v12
+    assert "/openfoam:12" in s.image_uri and s.image_uri.endswith(":12.0.0")
 
 def test_machine_catalog_is_all_c2d_highcpu():
     names = [m["name"] for m in MACHINE_CATALOG]
