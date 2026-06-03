@@ -212,7 +212,7 @@ Expected: backend has `batch.jobsEditor`; job has `batch.agentReporter`+`logging
 
 ### Task 6: IAP prerequisites — OAuth consent + access group (kartikey + Workspace admin)
 
-- [ ] **Step 1: Configure the OAuth consent screen as Internal** (Console: APIs & Services → OAuth consent screen → User type **Internal** → app name "OpenFOAM Batch" → save). Internal restricts sign-in to the `lemnisca.bio` org. *(No clean gcloud equivalent; do it in Console.)*
+- [ ] **Step 1: Configure the consent screen (new "Google Auth Platform" UI).** In the Console under **Google Auth Platform**: **Audience** → set **User type = Internal** (restricts sign-in to the `lemnisca.bio` org); **Branding** → set app name "OpenFOAM Batch" + support email. **Do NOT create an OAuth client** under "Clients" — IAP auto-creates its own Google-managed OAuth client when enabled on the Cloud Run service in M3. *(No clean gcloud equivalent; do it in Console.)*
 - [ ] **Step 2: Create the access Google Group** (Google Workspace Admin, or Google Groups): create `ACCESS_GROUP` (e.g. `of-batch-users@lemnisca.bio`) and add the people who may use the app. Record the address at the top of this runbook.
 - [ ] **Step 3 (verify):** confirm the group exists and you are a member (so you can test M3's IAP later). No CLI needed.
 
