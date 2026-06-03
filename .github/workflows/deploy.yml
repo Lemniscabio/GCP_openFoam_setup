@@ -1,0 +1,45 @@
+name: deploy
+on:
+  push: { branches: [main] }
+  pull_request: {}
+permissions: { contents: read, id-token: write }
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Tests (gate)
+        run: |
+          cd phase3-run-app
+          pip install -e ".[dev]" -r requirements-backend.txt
+          OF_DEV_NO_IAP=1 pytest -q
+          cd .. && bash openfoam-batch/tests/run_all.sh
+
+      - id: auth
+        if: github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: cfd-lemnisca
+          workload_identity_provider: projects/380489820300/locations/global/workloadIdentityPools/of-github-pool/providers/github-provider
+          service_account: of-ci-deployer@cfd-lemnisca.iam.gserviceaccount.com
+
+      - if: github.ref == 'refs/heads/main'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build + deploy
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          docker buildx build --platform linux/amd64 \
+            -f phase3-run-app/backend/Dockerfile \
+            -t us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend:${{ github.sha }} \
+            --push phase3-run-app
+          gcloud run deploy of-batch-app \
+            --image us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend:${{ github.sha }} \
+            --region us-central1 \
+            --service-account of-batch-backend@cfd-lemnisca.iam.gserviceaccount.com \
+            --no-allow-unauthenticated --project cfd-lemnisca
