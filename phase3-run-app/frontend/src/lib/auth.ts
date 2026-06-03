@@ -21,7 +21,8 @@ export const tokenStore = new TokenStore();
 // clientId = import.meta.env.VITE_OAUTH_CLIENT_ID
 export function initGoogleSignIn(clientId: string, onSignedIn: (email: string) => void) {
   // @ts-expect-error google is injected by the GIS script in index.html
-  google.accounts.id.initialize({
+  const g = google.accounts.id;
+  g.initialize({
     client_id: clientId,
     callback: (resp: { credential: string }) => {
       const claims = JSON.parse(atob(resp.credential.split(".")[1]));
@@ -29,6 +30,7 @@ export function initGoogleSignIn(clientId: string, onSignedIn: (email: string) =
       onSignedIn(claims.email);
     },
   });
-  // @ts-expect-error
-  google.accounts.id.prompt();
+  const btn = document.getElementById("gsi-button");
+  if (btn) g.renderButton(btn, { theme: "outline", size: "large", text: "signin_with" });
+  g.prompt(); // also show One Tap
 }

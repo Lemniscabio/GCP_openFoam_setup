@@ -764,3 +764,12 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ── Sign-in gate ── */
+.signin { min-height: 100vh; display: grid; place-items: center; }
+.signin-card { max-width: 360px; padding: 32px; display: flex; flex-direction: column;
+  align-items: center; gap: 12px; text-align: center; }
+.signin-title { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.signin-sub { font-size: 13px; color: var(--ink-2); }
+.signin-error { font-size: 12px; color: #b91c1c; margin-top: 8px; }
+.signin-card .brand-mark { width: 44px; height: 44px; border-radius: 12px; font-size: 15px; }
