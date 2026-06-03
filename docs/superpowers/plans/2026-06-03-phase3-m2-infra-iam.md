@@ -42,15 +42,25 @@ Expected: `project-688a4c78-5d5b-45b3-b5d`.
 
 ### Task 1: Grant kartikey the admin roles (pushkar / Owner — one-time)
 
-`roles/editor` (kartikey's current level) **cannot** set IAM policy, configure IAP, or create WIF. Rather than pushkar running every step, he grants kartikey two scoped admin roles once, then kartikey self-serves the rest.
+`roles/editor` (kartikey's current level) **cannot** set IAM policy, configure IAP, or create WIF. pushkar grants the two project-level admin roles once (Step 1). After that, because `projectIamAdmin` includes project-level `setIamPolicy`, **kartikey can self-grant the remaining resource-admin roles** (Step 1b) — no further pushkar round-trip.
 
-- [ ] **Step 1 (pushkar runs):**
+**Permission nuance that bites in Task 5:** `projectIamAdmin` only authorizes **project-level** bindings. Binding a role *on a resource* — the SA itself (Token Creator), a bucket, an AR repo — needs that resource's `setIamPolicy`, which lives in `roles/iam.serviceAccountAdmin`, `roles/storage.admin`, and `roles/artifactregistry.admin` respectively. Without them Task 5 Steps 1, 4, 5 fail with `PERMISSION_DENIED: ...setIamPolicy`.
+
+- [ ] **Step 1 (pushkar runs — one-time):**
 ```bash
 gcloud projects add-iam-policy-binding project-688a4c78-5d5b-45b3-b5d \
   --member="user:kartikey.attri@lemnisca.bio" --role="roles/resourcemanager.projectIamAdmin"
 gcloud projects add-iam-policy-binding project-688a4c78-5d5b-45b3-b5d \
   --member="user:kartikey.attri@lemnisca.bio" --role="roles/iap.admin"
 ```
+- [ ] **Step 1b (kartikey self-grants — works via projectIamAdmin):**
+```bash
+for ROLE in roles/iam.serviceAccountAdmin roles/storage.admin roles/artifactregistry.admin; do
+  gcloud projects add-iam-policy-binding project-688a4c78-5d5b-45b3-b5d \
+    --member="user:kartikey.attri@lemnisca.bio" --role="$ROLE"
+done
+```
+(These are broad standing roles; trim later if you want tighter long-term hygiene.)
 - [ ] **Step 2 (verify, kartikey):**
 ```bash
 gcloud projects get-iam-policy project-688a4c78-5d5b-45b3-b5d \
