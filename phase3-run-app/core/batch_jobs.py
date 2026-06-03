@@ -2,9 +2,10 @@ from core.naming import variant_for_machine
 from core.disks import build_disk_spec
 
 class BatchJobBuilder:
-    def __init__(self, bucket: str, image_uri: str) -> None:
+    def __init__(self, bucket: str, image_uri: str, job_service_account: str | None = None) -> None:
         self._bucket = bucket
         self._image = image_uri
+        self._job_sa = job_service_account
 
     def _task_spec(self, env: dict, cpu_milli: int, memory_mib: int,
                    volumes: list[dict], max_retry_count: int) -> dict:
@@ -47,10 +48,12 @@ class BatchJobBuilder:
             "SCRATCH_ROOT": "/mnt/disks/openfoam-scratch",
         }
         task_spec = self._task_spec(env, cpu_milli, memory_mib, disk["volumes"], max_retry_count)
+        alloc = {"instances": [self._instance_policy(machine_type, provisioning_model, disk["disks"])]}
+        if self._job_sa:
+            alloc["serviceAccount"] = {"email": self._job_sa}
         return {
             "taskGroups": [{"taskCount": 1, "parallelism": 1, "taskSpec": task_spec}],
-            "allocationPolicy": {"instances": [
-                self._instance_policy(machine_type, provisioning_model, disk["disks"])]},
+            "allocationPolicy": alloc,
             "logsPolicy": {"destination": "CLOUD_LOGGING"},
             "labels": {"app": "openfoam"},
         }
@@ -75,10 +78,12 @@ class BatchJobBuilder:
         }
         n = len(case_ids)
         task_spec = self._task_spec(env, cpu_milli, memory_mib, disk["volumes"], max_retry_count)
+        alloc = {"instances": [self._instance_policy(machine_type, provisioning_model, disk["disks"])]}
+        if self._job_sa:
+            alloc["serviceAccount"] = {"email": self._job_sa}
         return {
             "taskGroups": [{"taskCount": n, "parallelism": n, "taskSpec": task_spec}],
-            "allocationPolicy": {"instances": [
-                self._instance_policy(machine_type, provisioning_model, disk["disks"])]},
+            "allocationPolicy": alloc,
             "logsPolicy": {"destination": "CLOUD_LOGGING"},
             "labels": {"app": "openfoam"},
         }
