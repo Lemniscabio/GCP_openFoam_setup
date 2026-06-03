@@ -20,7 +20,7 @@
 - App access = **all of `lemnisca.bio`** (decided 2026-06-03) → M3 binds `domain:lemnisca.bio` to IAP; no group needed.
 
 **What is NOT in M2 (deferred to M3, because it needs the deployed Cloud Run service):**
-- Enabling IAP *on the service*, granting the IAP service agent `roles/run.invoker`, and granting `ACCESS_GROUP` → `roles/iap.httpsResourceAccessor` on the resource. M2 only does the IAP *prerequisites* (API + OAuth consent + group).
+- Enabling IAP *on the service*, granting the IAP service agent `roles/run.invoker`, and granting `domain:lemnisca.bio` → `roles/iap.httpsResourceAccessor` on the resource. M2 only does the IAP *prerequisites* (API + OAuth consent; access policy decided = whole org).
 
 ---
 
@@ -55,12 +55,13 @@ gcloud projects add-iam-policy-binding project-688a4c78-5d5b-45b3-b5d \
 ```
 - [ ] **Step 1b (kartikey self-grants — works via projectIamAdmin):**
 ```bash
-for ROLE in roles/iam.serviceAccountAdmin roles/storage.admin roles/artifactregistry.admin; do
+for ROLE in roles/iam.serviceAccountAdmin roles/storage.admin \
+            roles/artifactregistry.admin roles/iam.workloadIdentityPoolAdmin; do
   gcloud projects add-iam-policy-binding project-688a4c78-5d5b-45b3-b5d \
     --member="user:kartikey.attri@lemnisca.bio" --role="$ROLE"
 done
 ```
-(These are broad standing roles; trim later if you want tighter long-term hygiene.)
+(These are broad standing roles; trim later if you want tighter long-term hygiene. `workloadIdentityPoolAdmin` is needed for Task 7; the other three for Task 5.)
 - [ ] **Step 2 (verify, kartikey):**
 ```bash
 gcloud projects get-iam-policy project-688a4c78-5d5b-45b3-b5d \
@@ -253,7 +254,7 @@ done
 ```
 - [ ] **Step 4: Let the repo's WIF identity impersonate the deploy SA**
 
-Replace `GH_OWNER/GH_REPO`:
+Replace `Lemniscabio/https://github.com/Lemniscabio/GCP_openFoam_setup`:
 ```bash
 gcloud iam service-accounts add-iam-policy-binding \
   of-ci-deployer@project-688a4c78-5d5b-45b3-b5d.iam.gserviceaccount.com \
