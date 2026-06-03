@@ -82,7 +82,9 @@ and use `alloc` as the `allocationPolicy` value in the returned dict (both metho
 
 ---
 
-### Task 2: `core/uploads.py` — SignedPolicyService (per-case V4 POST policy)
+### Task 2: `core/uploads.py` — SignedUrlService (keyless per-file V4 PUT URLs) — DONE
+
+> **Built 2026-06-03 (differs from original plan):** google-cloud-storage 3.x removed `generate_signed_post_policy_v4`, so instead of one POST policy per case we mint one **V4 signed PUT URL per file** via the official `Blob.generate_signed_url` (keyless: `service_account_email` + `access_token`). No hand-rolled signing. API: `SignedUrlService(bucket, signer_email, token_provider).put_urls_for_case(case_id, relative_paths, now)`. Allocate (Task 6) takes the per-case file list and returns per-file URLs. Original POST-policy description below kept for context.
 
 **Files:** Create `core/uploads.py`; Test `tests/test_uploads.py`
 
@@ -259,9 +261,11 @@ from google.cloud import storage as gcs, batch_v1
 from core.config import Settings
 from core.storage import GcsStorage
 from core.cases import CaseRepository
-from core.uploads import SignedPolicyService
+from core.uploads import SignedUrlService
 from core.batch_jobs import BatchJobBuilder, BatchSubmitter
 from core.status import RunStatusService
+import google.auth
+from google.auth.transport.requests import Request
 
 @lru_cache
 def settings() -> Settings: return Settings()
@@ -269,9 +273,22 @@ def settings() -> Settings: return Settings()
 @lru_cache
 def _bucket(): return gcs.Client().bucket(settings().bucket)
 
+@lru_cache
+def _adc():
+    creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    return creds
+
+def _access_token() -> str:
+    creds = _adc()
+    if not creds.valid:
+        creds.refresh(Request())
+    return creds.token
+
 def case_repo() -> CaseRepository: return CaseRepository(GcsStorage(settings().bucket))
-def policy_service() -> SignedPolicyService:
-    return SignedPolicyService(_bucket(), signer_email=settings().backend_service_account)
+def url_service() -> SignedUrlService:
+    # keyless per-file V4 PUT URLs; the attached SA signs as itself via IAM
+    return SignedUrlService(_bucket(), signer_email=settings().backend_service_account,
+                            token_provider=_access_token)
 def builder() -> BatchJobBuilder:
     s = settings()
     return BatchJobBuilder(bucket=s.bucket, image_uri=s.image_uri, job_service_account=s.job_service_account)
@@ -403,22 +420,23 @@ from core.cases import CaseRepository
 _store = InMemoryStorage()
 app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(_store)
 
-class _FakePolicy:
-    def for_case(self, case_id, now): 
-        return type("P", (), {"url": "https://gcs", "fields": {"key": f"cases/{case_id}/case/"}, "case_id": case_id})()
-app.dependency_overrides[deps.policy_service] = lambda: _FakePolicy()
+class _FakeUrls:
+    def put_urls_for_case(self, case_id, files, now):
+        from core.uploads import SignedUpload, object_path
+        return [SignedUpload(object_path=object_path(case_id, f), url=f"https://signed/{case_id}/{f}") for f in files]
+app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
 client = TestClient(app)
 
-def test_allocate_returns_ids_and_policies():
-    r = client.post("/api/cases:allocate", json={"count": 3})
+def test_allocate_returns_ids_and_urls():
+    r = client.post("/api/cases:allocate", json={"cases": [{"files": ["0/U"]}, {"files": ["0/U", "system/controlDict"]}, {"files": ["0/p"]}]})
     assert r.status_code == 200
     body = r.json()
     assert len(body["cases"]) == 3
     assert body["cases"][0]["case_id"].startswith("case_")
-    assert body["cases"][0]["upload"]["url"] == "https://gcs"
+    assert body["cases"][1]["uploads"][1]["url"].startswith("https://signed/")
 
 def test_finalize_writes_ready():
-    cid = client.post("/api/cases:allocate", json={"count": 1}).json()["cases"][0]["case_id"]
+    cid = client.post("/api/cases:allocate", json={"cases": [{"files": ["0/U"]}]}).json()["cases"][0]["case_id"]
     r = client.post(f"/api/cases/{cid}:finalize", json={"openfoam_version": "12"})
     assert r.status_code == 200
     assert _store.object_exists(f"cases/{cid}/READY")
@@ -434,8 +452,11 @@ def test_list_cases():
 # backend/schemas.py
 from pydantic import BaseModel, Field
 
+class CaseUpload(BaseModel):
+    files: list[str] = Field(min_length=1)   # relative paths within the case dir (e.g. "0/U")
+
 class AllocateReq(BaseModel):
-    count: int = Field(ge=1, le=200)
+    cases: list[CaseUpload] = Field(min_length=1, max_length=200)
 
 class FinalizeReq(BaseModel):
     openfoam_version: str = "12"
@@ -451,7 +472,7 @@ class SubmitReq(BaseModel):
 # backend/routes_cases.py
 import json, datetime
 from fastapi import APIRouter, Depends
-from backend.deps import case_repo, policy_service, settings
+from backend.deps import case_repo, url_service, settings
 from backend.iap import current_user, User
 from backend.schemas import AllocateReq, FinalizeReq
 from core.storage import GcsStorage
@@ -460,14 +481,15 @@ router = APIRouter()
 
 @router.post("/cases:allocate")
 def allocate(req: AllocateReq, user: User = Depends(current_user),
-             repo=Depends(case_repo), policies=Depends(policy_service)):
-    ids = repo.allocate_ids(req.count)
+             repo=Depends(case_repo), urls=Depends(url_service)):
+    ids = repo.allocate_ids(len(req.cases))
     now = datetime.datetime.utcnow()
-    cases = []
-    for cid in ids:
-        p = policies.for_case(cid, now)
-        cases.append({"case_id": cid, "upload": {"url": p.url, "fields": p.fields}})
-    return {"cases": cases}
+    out = []
+    for cid, case in zip(ids, req.cases):
+        uploads = urls.put_urls_for_case(cid, case.files, now)
+        out.append({"case_id": cid,
+                    "uploads": [{"object_path": u.object_path, "url": u.url, "method": u.method} for u in uploads]})
+    return {"cases": out}
 
 @router.post("/cases/{case_id}:finalize")
 def finalize(case_id: str, req: FinalizeReq, user: User = Depends(current_user)):
