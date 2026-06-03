@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "https://of-batch-app-e3slrac76q-uc.a.run.app",
+      "https://of-batch-app-380489820300.us-central1.run.app",
+      "http://localhost:8080"
+    ],
+    "method": ["PUT", "GET", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "x-goog-resumable"],
+    "maxAgeSeconds": 3600
+  }
+]
