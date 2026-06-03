@@ -17,7 +17,7 @@
 
 **You must supply two values before starting** (write them here):
 - `GH_OWNER/GH_REPO` = `__________/__________`  (the GitHub repo that will deploy via Actions)
-- `ACCESS_GROUP` = `__________@lemnisca.bio`  (Google Group whose members may use the app)
+- App access = **all of `lemnisca.bio`** (decided 2026-06-03) → M3 binds `domain:lemnisca.bio` to IAP; no group needed.
 
 **What is NOT in M2 (deferred to M3, because it needs the deployed Cloud Run service):**
 - Enabling IAP *on the service*, granting the IAP service agent `roles/run.invoker`, and granting `ACCESS_GROUP` → `roles/iap.httpsResourceAccessor` on the resource. M2 only does the IAP *prerequisites* (API + OAuth consent + group).
@@ -213,10 +213,9 @@ Expected: backend has `batch.jobsEditor`; job has `batch.agentReporter`+`logging
 ### Task 6: IAP prerequisites — OAuth consent + access group (kartikey + Workspace admin)
 
 - [ ] **Step 1: Configure the consent screen (new "Google Auth Platform" UI).** In the Console under **Google Auth Platform**: **Audience** → set **User type = Internal** (restricts sign-in to the `lemnisca.bio` org); **Branding** → set app name "OpenFOAM Batch" + support email. **Do NOT create an OAuth client** under "Clients" — IAP auto-creates its own Google-managed OAuth client when enabled on the Cloud Run service in M3. *(No clean gcloud equivalent; do it in Console.)*
-- [ ] **Step 2: Create the access Google Group** (Google Workspace Admin, or Google Groups): create `ACCESS_GROUP` (e.g. `of-batch-users@lemnisca.bio`) and add the people who may use the app. Record the address at the top of this runbook.
-- [ ] **Step 3 (verify):** confirm the group exists and you are a member (so you can test M3's IAP later). No CLI needed.
+- [ ] **Step 2: No access group needed — access = the whole org.** Decision (2026-06-03): any `lemnisca.bio` user may use the app. So instead of a group/individual list, M3 binds `domain:lemnisca.bio` → `roles/iap.httpsResourceAccessor` on the IAP resource. With Audience=Internal already set, this admits all org accounts and excludes everyone else. Nothing to create here.
 
-> The service-level IAP toggle + `roles/iap.httpsResourceAccessor` for `ACCESS_GROUP` are done in **M3** once the Cloud Run service exists.
+> The service-level IAP toggle + the `domain:lemnisca.bio` → `roles/iap.httpsResourceAccessor` binding are done in **M3** once the Cloud Run service exists.
 
 ---
 
