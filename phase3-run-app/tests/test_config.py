@@ -2,7 +2,7 @@ from core.config import Settings, MACHINE_CATALOG
 
 def test_settings_defaults():
     s = Settings()
-    assert s.bucket == "of-cases"
+    assert s.bucket == "cfd-lemnisca-cases"
     assert s.region == "us-central1"
     # full pullable ref (registry/repo:tag), pinned to OpenFOAM v12
     assert "/openfoam:12" in s.image_uri and s.image_uri.endswith(":12.0.0")

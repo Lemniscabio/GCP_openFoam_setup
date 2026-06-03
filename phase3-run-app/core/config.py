@@ -17,10 +17,10 @@ MACHINE_CATALOG = [
 
 @dataclass
 class Settings:
-    project_id: str = os.environ.get("OF_PROJECT_ID", "project-688a4c78-5d5b-45b3-b5d")
+    project_id: str = os.environ.get("OF_PROJECT_ID", "cfd-lemnisca")
     region: str = os.environ.get("OF_REGION", "us-central1")
-    bucket: str = os.environ.get("OF_BUCKET", "of-cases")
-    # Full pullable ref so `of run` needs no OF_IMAGE_URI override. Migrate to
-    # Artifact Registry in M2; OF_IMAGE_URI still overrides for ad-hoc tags.
-    image_uri: str = os.environ.get("OF_IMAGE_URI", "us-central1-docker.pkg.dev/project-688a4c78-5d5b-45b3-b5d/openfoam/openfoam:12.0.0")
+    bucket: str = os.environ.get("OF_BUCKET", "cfd-lemnisca-cases")
+    # Full pullable ref so `of run` needs no OF_IMAGE_URI override. Private
+    # Artifact Registry in the dedicated cfd-lemnisca project; OF_IMAGE_URI overrides.
+    image_uri: str = os.environ.get("OF_IMAGE_URI", "us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.0")
     scratch_root: str = "/mnt/disks/openfoam-scratch"
