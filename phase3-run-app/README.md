@@ -1,113 +1,266 @@
 # Phase 3 — OpenFOAM Batch Run App
 
-Web app + CLI to **upload OpenFOAM cases to GCS and run them on Cloud Batch**, on a
-dedicated GCP project (`cfd-lemnisca`). One Cloud Run service serves the SPA *and* the
-API; the same pure-Python `core/` engine backs both the web app and the CLI.
+Upload OpenFOAM cases to GCS and run them on Google Cloud Batch — via a web UI **or** the `of` CLI. One Cloud Run service serves the SPA and the API; the same `core/` engine backs both.
 
-> Phase 3 of a 3-phase pipeline (P1 CAD/Salome MCP, P2 CFD/OpenFOAM MCP — future).
-> Design spec: `../docs/superpowers/specs/2026-06-01-phase3-run-app-design.md`.
-> Milestone plans: `../docs/superpowers/plans/2026-06-0*-phase3-*.md`.
+> Part of a 3-phase pipeline (P1 CAD/Salome MCP, P2 CFD/OpenFOAM MCP — future).
 
-## Layout
+---
+
+## Quick Start
+
+1. Open the app → sign in with your `@lemnisca.bio` Google account
+2. **Upload tab** — drop your case folder → Upload
+3. **Cases tab** → select cases → **Run tab** → pick machine → Run job
+4. **Runs tab** — live status, polled every 4 s
+
+That's the whole flow. Details below.
+
+---
+
+## Repo Layout
+
 ```
-core/        pure engine (no HTTP): naming, GCS storage, atomic case-id allocator,
-             validation, disk + Batch spec builders, signed URLs, run status, machines
-backend/     FastAPI: serves the built SPA at / and the API at /api/*; Google-ID-token auth
-frontend/    Vite + React + TS SPA (sign-in → upload → cases → run → runs)
-cli/         `of` CLI (upload / validate / list / run) over the same core
-infra/       setup + deploy scripts, bucket CORS/lifecycle, (see below)
-../openfoam-batch/  the runtime image (Dockerfile + runtime/run_case_in_batch.sh) Batch runs
+phase3-run-app/
+  core/        pure engine: naming, GCS storage, case allocator, validation,
+               disk + Batch spec builders, signed URLs, run status, machines
+  backend/     FastAPI: serves the SPA at / and the API at /api/*
+  frontend/    Vite + React + TS SPA (sign-in → upload → cases → run → runs)
+  cli/         `of` CLI — same operations as the web app, from the terminal
+  infra/       one-time setup + deploy scripts, bucket CORS/lifecycle config
+  runtime/     OpenFOAM Batch VM image (Dockerfile + run_case_in_batch.sh + tests)
 ```
 
-## GCP facts (project `cfd-lemnisca`, # `380489820300`, region `us-central1`)
-- **Cloud Run service:** `of-batch-app` — URLs `https://of-batch-app-e3slrac76q-uc.a.run.app` and `…-380489820300.us-central1.run.app`
-- **Bucket:** `cfd-lemnisca-cases` (`cases/`, `results/`, `checkpoints/`, `submissions/`)
-- **Service accounts:** `of-batch-backend@` (Cloud Run; least-priv, signs upload URLs, submits Batch), `of-batch-job@` (Batch VM identity), `of-ci-deployer@` (GitHub Actions)
-- **Artifact Registry:** `us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/` → `of-backend` (web) + `openfoam` (CFD runtime)
+---
 
-## Auth model
-- **No IAP** (the one-click Cloud Run IAP is broken on this project — undocumented error 604, root cause = project is under the wrong org; see TODO below).
-- Cloud Run is **public ingress**, and the **app enforces auth**: every `/api/*` request needs `Authorization: Bearer <Google ID token>`. `backend/auth.py` verifies it (official `google.oauth2.id_token`) and requires the Workspace **`hd` claim == `lemnisca.bio`** (hd-only — rejects non-org accounts with 403). `/` + `/health` are public.
-- Frontend uses **Google Identity Services**; the `OAUTH_CLIENT_ID` is a Web OAuth client (consent screen currently **External**). Session token is kept in `localStorage` with a **hard 60-min cap** (refresh keeps you in; relogin after 60 min).
+## GCP facts
 
-### ⚠️ TODO: move the project to the `lemnisca.bio` org
-`cfd-lemnisca` lives under org `493439251516`, not the lemnisca.bio org `356771806958`.
-That mismatch breaks **Internal** OAuth consent + **IAP**. When billing/cross-org friction
-is resolved: `gcloud beta projects move cfd-lemnisca --organization=356771806958` (needs Org
-Admin on both orgs), then switch consent → **Internal** (edge-blocks non-org users) and retry
-IAP. Until then, External + the hd-only app gate is the secure stand-in. (Full detail: spec §11.)
+| Thing | Value |
+|---|---|
+| Project | `cfd-lemnisca` (#`380489820300`) |
+| Region | `us-central1` |
+| Cloud Run service | `of-batch-app` — `https://of-batch-app-380489820300.us-central1.run.app` |
+| Bucket | `cfd-lemnisca-cases` |
+| Artifact Registry | `us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/` |
+| Service accounts | `of-batch-backend@` (Cloud Run), `of-batch-job@` (Batch VM), `of-ci-deployer@` (GitHub Actions) |
 
-## Environment variables
-| Var | Where | Purpose |
+---
+
+## Case folder format
+
+The uploader accepts two shapes:
+
+**Single case** — drop a folder that contains `command.sh` directly:
+```
+mycase/
+  system/
+  constant/
+  0/
+  command.sh      ← must be here
+```
+
+**Bulk** — drop a parent folder whose immediate subfolders are cases:
+```
+foam_runs/
+  case_a/
+    system/ constant/ 0/ command.sh
+  case_b/
+    system/ constant/ 0/ command.sh
+```
+
+`command.sh` must live **inside** the case folder. The runtime rsyncs the whole tree and runs it. It should contain only solver logic — no GCS download/upload, no `mpirun` argument construction (the runtime injects `MPI_RANKS`).
+
+---
+
+## Using the app
+
+### Upload tab
+Drop a case folder (single or bulk). Detected cases appear as a list. Press **Upload case(s)** — files go directly to GCS via signed PUT URLs; nothing passes through the backend server. Progress bar shows during upload.
+
+### Cases tab
+Lists all cases in the bucket with READY / incomplete status. Check one or more cases → **Run selected →** to configure a job.
+
+### Run tab
+Only reachable after selecting cases. Pick:
+- **Machine** — c2d-highcpu presets (2 to 112 vCPU). c2d-highcpu-16 is the proven sweet spot for most cases.
+- **Provisioning** — Standard (reliable) or **Spot** (cheaper, resumable via checkpointing).
+
+Press **Run job** → job appears in Runs within seconds.
+
+### Runs tab
+Live polling every 4 s. Job name, colored state badge (RUNNING pulses), Console ↗ link to the GCP Batch console. Skeletons show on first load instead of flashing empty.
+
+---
+
+## CLI — full alternative to the web app
+
+The `of` CLI covers every operation the web app does. Useful for scripting, automation, or when you're already in the terminal.
+
+```bash
+cd phase3-run-app
+pip install -e ".[dev]"
+```
+
+| Command | What it does | Web app equivalent |
 |---|---|---|
-| `VITE_OAUTH_CLIENT_ID` | **build-time** (Docker `--build-arg`; `frontend/.env.local` for dev) | inlined into the SPA bundle so the browser can start Google sign-in |
-| `OF_OAUTH_CLIENT_ID` | backend **runtime** env | audience the backend verifies ID tokens against (same value as above) |
-| `OF_ALLOWED_DOMAIN` | backend runtime env | org domain allowed (`lemnisca.bio`) |
-| `OF_IMAGE_URI` | backend runtime env | the OpenFOAM **runtime** image Batch jobs use (e.g. `…/openfoam:12.0.1`) |
-| `OF_DEV_NO_IAP=1` | local/dev only | bypass auth for local testing (never set in prod) |
+| `of upload --case-dir ./mycase --command-sh ./mycase/command.sh` | Upload one case to GCS | Upload tab |
+| `of list` | List all cases + READY status | Cases tab |
+| `of validate case_0042` | Check a case is complete before running | Cases tab status |
+| `of run --case 0042 --machine c2d-highcpu-56` | Submit a single-case Batch job | Run tab |
+| `of run --case 0042 --case 0043 --machine c2d-highcpu-16` | Submit a multi-task job (one VM per case) | Run tab (multi-select) |
+| `of run --case 0042 --machine c2d-highcpu-16 --spot` | Same but on Spot VMs | Provisioning toggle |
 
-## Image versioning (two images, two strategies — on purpose)
-- **Backend image (`of-backend`)** — **auto-versioned by CI** with the git commit SHA:
-  `of-backend:<github.sha>` (+ `:latest`). Every push to `main` builds a unique, immutable,
-  rollback-able image and deploys it. It changes every commit (frontend + API), so SHA tagging fits.
-- **OpenFOAM runtime image (`openfoam`)** — **NOT built by CI.** It's the heavy CFD image that
-  changes rarely (only when `openfoam-batch/runtime/run_case_in_batch.sh` or its `Dockerfile`
-  change), so it uses **manual semantic tags** (`openfoam:12.0.1` — `12` = OpenFOAM version,
-  `.0.1` = image revision). The deploy just *references* it via `OF_IMAGE_URI` (the workflow's
-  `RUNTIME_IMAGE`). **To change the runtime:** bump the tag, build+push it manually (below),
-  and update `RUNTIME_IMAGE` in `.github/workflows/deploy.yml`.
+The CLI uses ADC (`gcloud auth application-default login`) — no OAuth browser flow. Good for headless environments.
 
-  Rebuild the runtime image (amd64!):
-  ```bash
-  docker buildx build --platform linux/amd64 -f ../openfoam-batch/Dockerfile \
-    -t us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.2 --push ../openfoam-batch
-  ```
-  > Always build `linux/amd64` — the Mac defaults to arm64 and Batch rejects it.
+---
+
+## Spot VMs + checkpointing
+
+Checkpointing is always on. Every 30 s the runtime rsyncs solver state (`processor*/`) to `gs://cfd-lemnisca-cases/checkpoints/<case_id>/<variant>/latest/`. If the VM is preempted or stopped:
+
+- Batch retries automatically (up to 3 times)
+- The next attempt finds the checkpoint, restores it, sets `startFrom latestTime`, resumes
+- On clean success the checkpoint is deleted; lifecycle rule cleans up any orphans after 30 days
+
+No `maxRunDuration` — jobs run until done.
+
+---
+
+## Local development
+
+```bash
+# Python (backend + core tests)
+cd phase3-run-app
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]" -r requirements-backend.txt
+OF_DEV_NO_IAP=1 pytest -q
+
+# Runtime bash tests
+bash phase3-run-app/runtime/tests/run_all.sh
+
+# Frontend
+cd phase3-run-app/frontend
+npm install
+# create .env.local with: VITE_OAUTH_CLIENT_ID=380489820300-4ja0tnm6p2em05qgpg5krtac6e0f155c.apps.googleusercontent.com
+npm run dev    # http://localhost:8080
+```
+
+⚠️ **The Vite dev server proxies `/api/*` to the deployed Cloud Run backend.** Uploads and job submissions from local dev hit the **real** bucket and real Batch. Don't use it for bulk testing. Use the CLI with `--dry-run` or a scratch case instead.
+
+Also ensure `http://localhost:8080` is in the OAuth client's **Authorized JavaScript origins** (Google Cloud Console → APIs & Services → Credentials).
+
+---
 
 ## Deploy
-### CI (GitHub Actions + Workload Identity Federation) — preferred
-`.github/workflows/deploy.yml`: on **PR** runs the test gate (pytest + bash + vitest); on
-**push to `main`** authenticates to GCP keyless via **WIF** (pool `of-github-pool`, provider
-`github-provider`, SA `of-ci-deployer@`), builds the multi-stage backend image (SPA bundled,
-SHA-tagged), and deploys. **One-time setup:** add a repo **variable** `OAUTH_CLIENT_ID`
-(Settings → Secrets and variables → Actions → Variables). The repo must be
-`Lemniscabio/GCP_openFoam_setup` (the WIF provider is locked to it).
 
-### Manual (fallback)
+### CI — preferred (GitHub Actions + Workload Identity Federation)
+
+Every push to `main`:
+1. Runs the test gate (pytest + runtime bash tests + vitest)
+2. Builds the multi-stage backend image (SPA bundled, tagged with the commit SHA)
+3. Deploys to Cloud Run
+
+**One-time prerequisite:** add a repo **Variable** (not secret) in GitHub:
+> Settings → Secrets and variables → Actions → **Variables** tab
+> `OAUTH_CLIENT_ID` = `380489820300-4ja0tnm6p2em05qgpg5krtac6e0f155c.apps.googleusercontent.com`
+
+Without this the CI build succeeds but the deployed SPA has an empty client ID and sign-in silently fails.
+
+WIF is locked to repo `Lemniscabio/GCP_openFoam_setup`, SA `of-ci-deployer@cfd-lemnisca.iam.gserviceaccount.com`.
+
+### Manual — fallback
+
 ```bash
-# backend (SPA bundled). CLIENT_ID = the web OAuth client id
-docker buildx build --platform linux/amd64 --build-arg VITE_OAUTH_CLIENT_ID=CLIENT_ID \
-  -f backend/Dockerfile -t us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend:0.x.y --push .
-gcloud run deploy of-batch-app --image us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend:0.x.y \
-  --region us-central1 --service-account of-batch-backend@cfd-lemnisca.iam.gserviceaccount.com \
+# Set CLIENT_ID to the web OAuth client ID
+docker buildx build --platform linux/amd64 \
+  --build-arg VITE_OAUTH_CLIENT_ID=CLIENT_ID \
+  -f phase3-run-app/backend/Dockerfile \
+  -t us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend:manual \
+  --push phase3-run-app
+
+gcloud run deploy of-batch-app \
+  --image us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend:manual \
+  --region us-central1 \
+  --service-account of-batch-backend@cfd-lemnisca.iam.gserviceaccount.com \
   --allow-unauthenticated \
   --update-env-vars OF_OAUTH_CLIENT_ID=CLIENT_ID,OF_ALLOWED_DOMAIN=lemnisca.bio,OF_IMAGE_URI=us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.1 \
   --project cfd-lemnisca
 ```
-Bucket needs CORS for browser uploads: `gcloud storage buckets update gs://cfd-lemnisca-cases --cors-file=infra/of-cases-cors.json`.
 
-## Local development
-```bash
-# backend tests
-cd phase3-run-app && python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]" -r requirements-backend.txt
-OF_DEV_NO_IAP=1 pytest -q
-# runtime bash tests
-bash ../openfoam-batch/tests/run_all.sh
-# frontend (UI work)
-cd frontend && npm install && npm run dev -- --port 8080   # http://localhost:8080
-```
-For the frontend dev server: create `frontend/.env.local` with `VITE_OAUTH_CLIENT_ID=…`, and
-ensure the OAuth client's **Authorized JavaScript origins** include `http://localhost:8080`.
-`/api/*` calls go same-origin (no local backend) — for full local API, add a Vite proxy to the
-deployed Cloud Run URL or run the backend with `OF_DEV_NO_IAP=1`.
+---
 
-## CLI
+## Runtime image (OpenFOAM on Batch VMs)
+
+The runtime image is **not built by CI** — it changes rarely (only when `runtime/run_case_in_batch.sh` or the Dockerfile changes) and is large. It uses manual semver tags: `openfoam:12.X.Y` (12 = OpenFOAM version, X.Y = image revision).
+
+**When to rebuild:** only when `runtime/run_case_in_batch.sh` changes or you update OpenFOAM.
+
+**When NOT to rebuild:** deploying frontend/backend changes — CI handles those with SHA-tagged `of-backend` images.
+
 ```bash
-of upload --case-dir ./mycase --command-sh ./mycase/command.sh   # uploads case tree (command.sh inside case/)
-of validate case_0042
-of list
-of run --case 0042 --machine c2d-highcpu-56 [--spot]
+# Always linux/amd64 — Mac defaults to arm64, Batch rejects it
+docker buildx build --platform linux/amd64 \
+  -f phase3-run-app/runtime/Dockerfile \
+  -t us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.2 \
+  --push phase3-run-app/runtime
+
+# Then update RUNTIME_IMAGE in .github/workflows/deploy.yml
 ```
-`command.sh` lives **inside** the case tree (`cases/<id>/case/command.sh`); the runtime
-rsyncs the tree down and runs it. No `maxRunDuration` (jobs run until done/stopped);
-checkpointing is always-on; Spot is opt-in.
+
+After bumping the tag, update `RUNTIME_IMAGE` in `.github/workflows/deploy.yml` and redeploy — the Cloud Run service picks it up via `OF_IMAGE_URI`.
+
+---
+
+## Auth and access
+
+- Cloud Run is **public ingress** (IAP is broken — project is under the wrong org; see TODO below)
+- Every `/api/*` call needs `Authorization: Bearer <Google ID token>`
+- The backend verifies the token and requires **`hd == lemnisca.bio`** — non-org Google accounts get a 403 immediately
+- The frontend enforces the same check and shows a "Not authorized" screen for non-org emails
+- Sessions persist in `localStorage` with a hard **60-minute cap** — you'll be prompted to sign in again after 60 min
+
+### ⚠️ TODO: move project to the lemnisca.bio org
+
+`cfd-lemnisca` lives under org `493439251516`, not the lemnisca.bio org `356771806958`. This breaks **Internal** OAuth consent and **IAP**. When resolved:
+
+```bash
+gcloud beta projects move cfd-lemnisca --organization=356771806958
+# then: switch OAuth consent → Internal, retry IAP
+```
+
+Until then, External consent + the hd-only gate is the enforced security boundary.
+
+---
+
+## Environment variables
+
+| Var | Where | Purpose |
+|---|---|---|
+| `VITE_OAUTH_CLIENT_ID` | **build-time** (CI `--build-arg`; `frontend/.env.local` for dev) | Inlined into the SPA so the browser can start Google sign-in |
+| `OF_OAUTH_CLIENT_ID` | backend **runtime** env | Audience the backend verifies ID tokens against (same value) |
+| `OF_ALLOWED_DOMAIN` | backend runtime env | Org domain enforced (`lemnisca.bio`) |
+| `OF_IMAGE_URI` | backend runtime env | OpenFOAM runtime image Batch jobs use |
+| `OF_DEV_NO_IAP=1` | local/dev only | Bypass auth for local testing — **never set in prod** |
+
+---
+
+## What NOT to do
+
+- **Don't use `npm run dev` for any real upload testing** — the proxy hits the live backend and bucket. Use a scratch case or the CLI.
+- **Don't resubmit a job that's still RUNNING** — two jobs writing to the same checkpoint prefix will corrupt each other. Check Runs tab first.
+- **Don't omit the `OAUTH_CLIENT_ID` repo variable before merging to main** — CI will succeed but the deployed app won't let anyone sign in.
+- **Don't build the runtime image without `--platform linux/amd64`** — Batch VMs are x86_64; arm64 images (Mac default) fail at pull time with "no matching manifest".
+- **Don't set `OF_DEV_NO_IAP=1` in the Cloud Run deploy** — it disables all authentication.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Sign-in button does nothing / "not authorized" screen | Non-`@lemnisca.bio` account, or `OAUTH_CLIENT_ID` missing in CI | Check the account; check the GitHub variable |
+| Upload fails with 403 | Bucket CORS not set | `gcloud storage buckets update gs://cfd-lemnisca-cases --cors-file=infra/of-cases-cors.json` |
+| Case shows "incomplete" forever | Upload was interrupted before finalize | Re-upload the case (get a new case_id) |
+| Job never appears in Runs after clicking Run job | Batch API error or SA permissions | Check Cloud Run logs; verify `of-batch-backend@` has `roles/batch.jobsEditor` |
+| Job FAILED immediately | Wrong runtime image arch, or missing `command.sh` in case tree | Check Batch logs in Console; confirm image is `linux/amd64`; validate with `of validate <id>` |
+| Local dev: "Unexpected token '<'" / 404 on /api | Vite proxy not running or misconfigured | Confirm `npm run dev` is running on `:8080`; check `vite.config.ts` proxy target |
+| Local dev: "google is not defined" | GIS script loaded async, race condition | Fixed in current code (retry loop in `auth.ts`) — hard-refresh to clear cache |

@@ -19,6 +19,29 @@ assert_eq "fixed" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.environment
 assert_eq "null" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.environment.variables.CASE_ID // "null"')" "no single CASE_ID"
 teardown_tmp_workspace
 
+start_test "bare numeric case IDs are canonicalized before CASE_ID_LIST is emitted"
+setup_tmp_workspace
+JSON="$(GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
+  project-test us-central1 docker.io/test:1 \
+  fixed c2d-standard-16 \
+  16000 8 65536 1 43200s \
+  0001 0024 case_0027 2>"${TMPDIR_TEST}/stderr")"
+assert_eq "case_0001,case_0024,case_0027" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.environment.variables.CASE_ID_LIST')" "canonical CASE_ID_LIST"
+teardown_tmp_workspace
+
+start_test "SKIP_VERIFY=1 submits named cases without running prefix verification"
+setup_tmp_workspace
+OUT="$(GCLOUD_LS_HITS="" SKIP_VERIFY=1 bash "${SCRIPT}" \
+  project-test us-central1 docker.io/test:1 \
+  sweep75 c2d-standard-16 \
+  16000 8 65536 1 43200s \
+  case_0028 case_0029 2>"${TMPDIR_TEST}/stderr")"
+assert_contains "Submitted of-multi-sweep75-" "${OUT}" "submission reaches Batch submit"
+assert_not_contains "/cases/case_0028/" "$(cat "${GCLOUD_LOG}")" "case_0028 validation skipped"
+assert_not_contains "/cases/case_0029/" "$(cat "${GCLOUD_LOG}")" "case_0029 validation skipped"
+assert_contains "gcloud batch jobs submit" "$(cat "${GCLOUD_LOG}")" "Batch job submitted"
+teardown_tmp_workspace
+
 start_test "rejects empty case list"
 setup_tmp_workspace
 GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
