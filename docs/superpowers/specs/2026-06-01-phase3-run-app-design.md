@@ -261,7 +261,15 @@ After **M1** the fixed CLI already delivers value; the web app layers on the sam
 ---
 
 ## 10. Open items / assumptions
-- Same project as BioHermes — all resources namespaced `of-…`; must not weaken BioHermes IAM.
-- Machine catalog: all `c2d-highcpu` sizes (`-2, -4, -8, -16, -32, -56, -112`).
-- Region default `us-central1` (confirm Batch + c2d-highcpu availability per zone).
-- Bucket: `of-cases` (existing).
+- Moved to a **dedicated project `cfd-lemnisca`** (not BioHermes's shared project — see history). Bucket: `cfd-lemnisca-cases`. Machine catalog: all `c2d-highcpu` sizes. Region `us-central1`.
+
+## 11. ⚠️ TODO — move `cfd-lemnisca` to the `lemnisca.bio` org (2026-06-04)
+**Problem:** `cfd-lemnisca` currently lives under org **`493439251516`** (NOT lemnisca.bio). The lemnisca.bio Workspace org is **`356771806958`** (directory customer `C019126uo`). Because the project's org ≠ the users' org:
+- OAuth **Internal** consent rejects `@lemnisca.bio` users (`403 org_internal`), so we run **External** consent + an **app-level hd-claim gate** (`backend/auth.py`, restricted to `lemnisca.bio`).
+- **IAP** on Cloud Run fails with undocumented **error 604** (managed-OAuth client won't provision) — likely the same org mismatch; abandoned in favor of app-level auth.
+
+**Fix (deferred — billing/cross-org friction):** move the project into the lemnisca.bio org:
+```
+gcloud beta projects move cfd-lemnisca --organization=356771806958
+```
+Needs **Org Admin on both** orgs (move-out of 493439251516 = pushkar; move-in to 356771806958 = lemnisca.bio super-admin). Re-link billing + review org-policy inheritance afterward. **Once moved:** switch OAuth consent back to **Internal** (edge-blocks non-org users, removes public exposure) and **retry IAP** (may then work, giving edge-level auth). Until then, the External + hd-only app gate is the secure stand-in.

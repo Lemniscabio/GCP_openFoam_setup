@@ -30,3 +30,12 @@ def test_unverified_email_rejected():
             {"email": "x@lemnisca.bio", "sub": "3", "email_verified": False},
             allowed_domain="lemnisca.bio",
         )
+
+
+def test_lemnisca_email_without_hd_rejected():
+    # hd-only: a @lemnisca.bio email lacking the Workspace hd claim is rejected
+    with pytest.raises(PermissionError):
+        user_from_idinfo(
+            {"email": "x@lemnisca.bio", "sub": "4", "email_verified": True},
+            allowed_domain="lemnisca.bio",
+        )

@@ -17,9 +17,12 @@ def user_from_idinfo(idinfo: dict, allowed_domain: str) -> User:
     if not idinfo.get("email_verified"):
         raise PermissionError("email not verified")
 
-    domain = idinfo.get("hd") or (email.rsplit("@", 1)[-1] if "@" in email else "")
-    if domain != allowed_domain:
-        raise PermissionError(f"domain {domain!r} not allowed")
+    # hd-only: require the Google Workspace 'hosted domain' claim to match.
+    # Personal/non-Workspace accounts have no hd, so they're rejected outright
+    # (stronger than an email-suffix match — no look-alike can slip through).
+    hd = idinfo.get("hd")
+    if hd != allowed_domain:
+        raise PermissionError(f"not a {allowed_domain} Workspace account (hd={hd!r})")
 
     return User(email=email, sub=idinfo.get("sub", ""))
 

@@ -6,3 +6,4 @@ export type { CaseInfo, RunSummary } from "./api";
 export const api = new ApiClient("", () => tokenStore.get());
 
 export const OAUTH_CLIENT_ID = (import.meta.env.VITE_OAUTH_CLIENT_ID as string) ?? "";
+export const ALLOWED_DOMAIN = (import.meta.env.VITE_ALLOWED_DOMAIN as string) || "lemnisca.bio";
