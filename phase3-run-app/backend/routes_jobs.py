@@ -24,7 +24,7 @@ def submit(
         raise HTTPException(status_code=400, detail=f"unknown machine {req.machine_type}")
 
     case_ids = [canonical_case_id(case_id) for case_id in req.case_ids]
-    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
     provisioning_model = "SPOT" if req.spot else "STANDARD"
     common = {
         "cpu_milli": machine["cpu_milli"],

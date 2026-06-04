@@ -2,7 +2,7 @@
 # shellcheck disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib/test_helpers.sh"
 
-SCRIPT_UNDER_TEST="${REPO_ROOT}/openfoam-batch/runtime/run_case_in_batch.sh"
+SCRIPT_UNDER_TEST="${REPO_ROOT}/phase3-run-app/runtime/run_case_in_batch.sh"
 
 start_test "runtime aborts when SCRATCH_ROOT does not exist"
 setup_tmp_workspace

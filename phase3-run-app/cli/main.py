@@ -14,7 +14,7 @@ from core.validation import validate_case
 
 
 def _now_ts() -> str:
-    return datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
 
 
 @click.group()
@@ -64,10 +64,10 @@ def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version):
     subprocess.run(["gcloud", "storage", "cp", command_sh, f"{base}/case/command.sh"], check=True)
     manifest = json.dumps({
         "case_id": cid, "solver_family": "openfoam", "openfoam_version": openfoam_version,
-        "uploaded_at_utc": datetime.datetime.utcnow().isoformat() + "Z",
+        "uploaded_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
     })
     storage.upload_bytes(f"cases/{cid}/manifest.json", manifest.encode())
-    storage.upload_bytes(f"cases/{cid}/READY", (datetime.datetime.utcnow().isoformat() + "Z").encode())
+    storage.upload_bytes(f"cases/{cid}/READY", (datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z").encode())
     click.echo(f"Uploaded {cid} to {base}")
 
 
