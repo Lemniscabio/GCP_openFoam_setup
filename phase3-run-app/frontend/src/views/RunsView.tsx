@@ -17,6 +17,7 @@ const STATE_COLOR: Record<string, string> = {
 export function RunsView() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const panelVariants = usePanelVariants();
   const listVariants = useListItemVariants();
 
@@ -28,10 +29,12 @@ export function RunsView() {
         if (alive) { setRuns(r.runs); setErr(null); }
       } catch (e) {
         if (alive) setErr(String(e));
+      } finally {
+        if (alive) setLoading(false);
       }
     }
     tick();
-    const id = setInterval(tick, 4000); // poll
+    const id = setInterval(tick, 4000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -54,7 +57,18 @@ export function RunsView() {
         </div>
         <div className="panel-body">
           {err && <div className="empty-state">Error: {err}</div>}
-          {!err && runs.length === 0 && <div className="empty-state">No runs yet.</div>}
+          {loading && (
+            <div className="stack">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="stack-item skeleton-row" style={{ animationDelay: `${i * 120}ms` }}>
+                  <span className="skel skel-long" />
+                  <span className="skel skel-short" />
+                  <span className="skel skel-btn" />
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && !err && runs.length === 0 && <div className="empty-state">No runs yet.</div>}
           <div className="stack">
             {runs.map((r, index) => {
               const stateBadge = (

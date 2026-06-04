@@ -765,6 +765,27 @@ button {
   text-align: center;
 }
 
+/* ── Skeleton loader ── */
+@keyframes skel-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+.skeleton-row {
+  pointer-events: none;
+  animation: skel-pulse 1.4s ease-in-out infinite;
+}
+
+.skel {
+  display: block;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+}
+
+.skel-long  { width: 60%; height: 12px; }
+.skel-short { width: 64px; height: 20px; border-radius: 999px; }
+.skel-btn   { width: 72px; height: 28px; border-radius: 10px; }
+
 .hidden {
   display: none !important;
 }
