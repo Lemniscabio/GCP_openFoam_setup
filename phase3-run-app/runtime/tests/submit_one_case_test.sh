@@ -61,4 +61,13 @@ assert_eq "SPOT" "$(echo "${JSON}" | jq -r '.allocationPolicy.instances[0].polic
 assert_eq "5" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.maxRetryCount')" "retry override"
 teardown_tmp_workspace
 
+start_test "bare numeric case ID is canonicalized in runtime environment"
+setup_tmp_workspace
+JSON="$(GCLOUD_LS_HITS="" DRY_RUN=1 bash "${SCRIPT}" \
+  project-test us-central1 docker.io/test:1 \
+  0024 fixed c2d-standard-16 \
+  16000 8 65536 1 43200s 2>"${TMPDIR_TEST}/stderr")"
+assert_eq "case_0024" "$(echo "${JSON}" | jq -r '.taskGroups[0].taskSpec.environment.variables.CASE_ID')" "canonical CASE_ID"
+teardown_tmp_workspace
+
 exit "${TEST_FAILURES}"

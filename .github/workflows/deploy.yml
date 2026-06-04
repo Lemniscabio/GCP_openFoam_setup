@@ -26,7 +26,7 @@ jobs:
           cd phase3-run-app
           pip install -e ".[dev]" -r requirements-backend.txt
           OF_DEV_NO_IAP=1 pytest -q
-          cd .. && bash openfoam-batch/tests/run_all.sh
+          cd .. && bash phase3-run-app/runtime/tests/run_all.sh
       - uses: actions/setup-node@v4.4.0
         with: { node-version: "20" }
       - name: Frontend tests

@@ -233,7 +233,7 @@ Without a separate runtime script, all orchestration would have to be embedded i
 Current expected bucket layout:
 
 ```text
-gs://openfoam_cases/
+gs://of-cases/
   cases/
     CASE_ID/
       case.tar.gz
@@ -248,12 +248,13 @@ gs://openfoam_cases/
     CASE_ID/
       fixed/
         JOB_NAME/
-          manifest.json
-          runtime.json
-          solver.stdout.log
-          exit_code.txt
-          result.tar.gz
-          _SUCCESS | _FAILED
+          task_<BATCH_TASK_INDEX>/
+            manifest.json
+            runtime.json
+            solver.stdout.log
+            exit_code.txt
+            result.tar.gz
+            _SUCCESS | _FAILED
 ```
 
 ## GCS Lifecycle Rule
@@ -273,7 +274,7 @@ cat > /tmp/openfoam-lifecycle.json <<EOF
   }
 }
 EOF
-gcloud storage buckets update gs://openfoam_cases \
+gcloud storage buckets update gs://of-cases \
   --lifecycle-file=/tmp/openfoam-lifecycle.json
 ```
 
@@ -404,8 +405,8 @@ So even though you do not pass a service account into the scripts anymore, the B
 
 That default service account needs permission to:
 
-- read from `gs://openfoam_cases/cases/...`
-- write to `gs://openfoam_cases/results/...`
+- read from `gs://of-cases/cases/...`
+- write to `gs://of-cases/results/...`
 - write submission metadata
 
 ## End-To-End Flow
@@ -519,7 +520,7 @@ The MPI parallelism for OpenFOAM happens inside the container through `mpirun`, 
 `VARIANT_ID` is a free-form label used to tag a submission run. It appears in:
 
 - the job name: `of-CASE_ID-VARIANT_ID-TIMESTAMP`
-- GCS result path: `results/CASE_ID/VARIANT_ID/JOB_NAME/`
+- GCS result path: `results/CASE_ID/VARIANT_ID/JOB_NAME/task_<BATCH_TASK_INDEX>/`
 - submission marker: `submissions/CASE_ID/VARIANT_ID.latest.json`
 
 Earlier runs used `fixed` as the variant. For benchmarking across machine families, use the family name (e.g. `c2d`, `c3d`) so results are organized per machine type.
@@ -552,7 +553,7 @@ Always specify the image tag explicitly (e.g. `docker.io/kartikeyattri/openfoam:
 Current test baseline:
 
 - project ID: `project-688a4c78-5d5b-45b3-b5d`
-- bucket: `openfoam_cases`
+- bucket: `of-cases`
 - image: `docker.io/kartikeyattri/openfoam:12`
 - region: `us-central1`
 - machine type: `c2d-standard-16`
@@ -631,7 +632,7 @@ gcloud logging read \
 ```
 
 ```bash
-gcloud storage ls gs://openfoam_cases/results/CASE_ID/fixed/JOB_NAME/
+gcloud storage ls gs://of-cases/results/CASE_ID/fixed/JOB_NAME/
 ```
 
 List running Batch jobs:
