@@ -722,6 +722,49 @@ button {
   gap: 8px;
 }
 
+/* ── Stack list (cases / run items) ── */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stack-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.stack-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stack-path {
+  flex-shrink: 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.empty-state {
+  padding: 20px 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-style: italic;
+  text-align: center;
+}
+
 .hidden {
   display: none !important;
 }
