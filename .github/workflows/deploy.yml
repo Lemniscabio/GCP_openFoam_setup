@@ -18,8 +18,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with: { python-version: "3.12" }
       - name: Backend + runtime tests
         run: |
@@ -27,7 +27,7 @@ jobs:
           pip install -e ".[dev]" -r requirements-backend.txt
           OF_DEV_NO_IAP=1 pytest -q
           cd .. && bash openfoam-batch/tests/run_all.sh
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4.4.0
         with: { node-version: "20" }
       - name: Frontend tests
         run: cd phase3-run-app/frontend && npm ci && npx vitest run
@@ -38,14 +38,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v2.1.8
         with:
           project_id: ${{ env.PROJECT_ID }}
           workload_identity_provider: projects/380489820300/locations/global/workloadIdentityPools/of-github-pool/providers/github-provider
           service_account: of-ci-deployer@cfd-lemnisca.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v2.1.4
       - name: Build + push backend image (SPA bundled), tagged by commit SHA
         run: |
           gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
