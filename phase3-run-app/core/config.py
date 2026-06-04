@@ -4,6 +4,16 @@ from dataclasses import dataclass
 # vCPU -> (cpu_milli, memory_mib). c2d-highcpu is 2GB/vCPU.
 _C2D_HIGHCPU_VCPUS = [2, 4, 8, 16, 32, 56, 112]
 
+
+def min_local_ssd_count(vcpus: int) -> int:
+    if vcpus <= 0:
+        raise ValueError("vcpus must be positive")
+    for count in (1, 2, 4, 8):
+        if count * 16 >= vcpus:
+            return count
+    raise ValueError(f"no valid local SSD count for {vcpus} vCPUs")
+
+
 MACHINE_CATALOG = [
     {
         "name": f"c2d-highcpu-{v}",
@@ -11,9 +21,17 @@ MACHINE_CATALOG = [
         "cpu_milli": v * 1000,
         "memory_mib": v * 2048,
         "default_mpi_ranks": max(1, v // 2),
+        "local_ssd_count": min_local_ssd_count(v),
     }
     for v in _C2D_HIGHCPU_VCPUS
 ]
+
+
+def local_ssd_count_for_machine_type(machine_type: str) -> int:
+    for machine in MACHINE_CATALOG:
+        if machine["name"] == machine_type:
+            return machine["local_ssd_count"]
+    raise KeyError(machine_type)
 
 @dataclass
 class Settings:
