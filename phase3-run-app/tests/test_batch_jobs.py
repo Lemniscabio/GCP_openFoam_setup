@@ -1,5 +1,7 @@
 from core.batch_jobs import BatchJobBuilder
 
+_SCRATCH_BIND_MOUNT = "/mnt/disks/openfoam-scratch:/mnt/disks/openfoam-scratch"
+
 def _build_single():
     return BatchJobBuilder(bucket="of-cases", image_uri="openfoam:12.0.0").build_single(
         case_id="case_0042", machine_type="c2d-highcpu-56",
@@ -38,7 +40,7 @@ def test_default_disk_is_local_ssd():
 
 def test_image_tag_recorded():
     spec = _build_single()
-    assert spec["taskGroups"][0]["taskSpec"]["runnables"][0]["container"]["imageUri"] == "openfoam:12.0.0"
+    assert spec["taskGroups"][0]["taskSpec"]["runnables"][1]["container"]["imageUri"] == "openfoam:12.0.0"
 
 def test_multi_taskcount_equals_parallelism_equals_case_count():
     spec = BatchJobBuilder(bucket="of-cases", image_uri="openfoam:12.0.0").build_multi(
@@ -55,6 +57,40 @@ def test_multi_passes_case_id_list_and_omits_case_id():
     env = spec["taskGroups"][0]["taskSpec"]["environment"]["variables"]
     assert env["CASE_ID_LIST"] == "case_0001,case_0002"
     assert "CASE_ID" not in env
+
+
+def test_c2d_highcpu_32_uses_two_local_ssds_and_raid_script():
+    spec = BatchJobBuilder(bucket="of-cases", image_uri="openfoam:12.0.0").build_single(
+        case_id="case_0042", machine_type="c2d-highcpu-32",
+        cpu_milli=32000, memory_mib=65536, mpi_ranks=16, job_name="j")
+    disks = spec["allocationPolicy"]["instances"][0]["policy"]["disks"]
+    task_spec = spec["taskGroups"][0]["taskSpec"]
+    script = task_spec["runnables"][0]["script"]["text"]
+    container = task_spec["runnables"][1]["container"]
+
+    assert len(disks) == 2
+    assert all(d["newDisk"]["type"] == "local-ssd" for d in disks)
+    assert "mdadm" in script
+    assert "--raid-devices=2" in script
+    assert task_spec["volumes"] == []
+    assert container["volumes"] == [_SCRATCH_BIND_MOUNT]
+
+
+def test_c2d_highcpu_8_uses_one_local_ssd_without_mdadm():
+    spec = BatchJobBuilder(bucket="of-cases", image_uri="openfoam:12.0.0").build_single(
+        case_id="case_0042", machine_type="c2d-highcpu-8",
+        cpu_milli=8000, memory_mib=16384, mpi_ranks=4, job_name="j")
+    disks = spec["allocationPolicy"]["instances"][0]["policy"]["disks"]
+    task_spec = spec["taskGroups"][0]["taskSpec"]
+    script = task_spec["runnables"][0]["script"]["text"]
+    container = task_spec["runnables"][1]["container"]
+
+    assert len(disks) == 1
+    assert disks[0]["newDisk"]["type"] == "local-ssd"
+    assert "mdadm" not in script
+    assert "mkfs.ext4 -F \"${devices[0]}\"" in script
+    assert task_spec["volumes"] == []
+    assert container["volumes"] == [_SCRATCH_BIND_MOUNT]
 
 
 def test_specs_parse_into_batch_job_proto():

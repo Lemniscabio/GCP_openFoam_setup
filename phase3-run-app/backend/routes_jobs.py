@@ -31,6 +31,7 @@ def submit(
         "memory_mib": machine["memory_mib"],
         "mpi_ranks": machine["default_mpi_ranks"],
         "provisioning_model": provisioning_model,
+        "local_ssd_count": machine["local_ssd_count"],
     }
 
     if len(case_ids) == 1:

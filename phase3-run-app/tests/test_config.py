@@ -1,4 +1,4 @@
-from core.config import Settings, MACHINE_CATALOG
+from core.config import Settings, MACHINE_CATALOG, min_local_ssd_count
 
 def test_settings_defaults():
     s = Settings()
@@ -16,3 +16,28 @@ def test_machine_catalog_is_all_c2d_highcpu():
     names = [m["name"] for m in MACHINE_CATALOG]
     assert names == ["c2d-highcpu-2","c2d-highcpu-4","c2d-highcpu-8",
                      "c2d-highcpu-16","c2d-highcpu-32","c2d-highcpu-56","c2d-highcpu-112"]
+
+def test_min_local_ssd_count_for_c2d_highcpu_sizes():
+    expected = {
+        2: 1,
+        4: 1,
+        8: 1,
+        16: 1,
+        32: 2,
+        56: 4,
+        112: 8,
+    }
+    for vcpus, count in expected.items():
+        assert min_local_ssd_count(vcpus) == count
+
+def test_machine_catalog_exposes_local_ssd_count():
+    counts = {m["name"]: m["local_ssd_count"] for m in MACHINE_CATALOG}
+    assert counts == {
+        "c2d-highcpu-2": 1,
+        "c2d-highcpu-4": 1,
+        "c2d-highcpu-8": 1,
+        "c2d-highcpu-16": 1,
+        "c2d-highcpu-32": 2,
+        "c2d-highcpu-56": 4,
+        "c2d-highcpu-112": 8,
+    }

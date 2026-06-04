@@ -85,7 +85,8 @@ def run(settings: Settings, cases, machine, spot):
     ts = _now_ts()
     ids = [canonical_case_id(c) for c in cases]
     common = dict(cpu_milli=spec_machine["cpu_milli"], memory_mib=spec_machine["memory_mib"],
-                  mpi_ranks=spec_machine["default_mpi_ranks"], provisioning_model=prov)
+                  mpi_ranks=spec_machine["default_mpi_ranks"], provisioning_model=prov,
+                  local_ssd_count=spec_machine["local_ssd_count"])
     if len(ids) == 1:
         job_name = build_job_name(ids[0], machine, ts)
         spec = builder.build_single(case_id=ids[0], machine_type=machine, job_name=job_name, **common)
