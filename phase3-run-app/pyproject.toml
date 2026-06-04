@@ -1,0 +1,23 @@
+[project]
+name = "of-batch-core"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "google-cloud-storage>=2.16",
+  "google-cloud-batch>=0.17",
+  "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+of = "cli.main:cli"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "cli*"]

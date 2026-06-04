@@ -49,6 +49,40 @@ The Batch VM itself runs:
 
 - `scripts/admin/run_case_in_batch.sh`
 
+## Submission Modes
+
+Three modes, distinguished by how Batch tasks are organized:
+
+| Mode | Script | taskCount | Submitted as | Use case |
+|---|---|---|---|---|
+| Single job, single task | `scripts/admin/submit_one_case.sh` | 1 | 1 Batch job | One case at a time |
+| Multi job, single task | `scripts/admin/submit_all_ready_cases.sh` | 1 each | N Batch jobs | Bulk: every READY case → its own job |
+| Single job, multi task | `scripts/admin/submit_one_job_multi_task.sh` | N | 1 Batch job | A named set of cases → one job, one VM per case |
+
+The result path layout is uniform across all three:
+
+`results/CASE_ID/VARIANT_ID/JOB_NAME/task_<i>/...`
+
+Single-task jobs always use `task_0`. Multi-task jobs index `task_<i>` from `BATCH_TASK_INDEX`.
+
+## Spot VMs and Fault Tolerance
+
+Spot is opt-in via env var:
+
+```bash
+PROVISIONING_MODEL=SPOT MAX_RETRY_COUNT=3 ./scripts/admin/submit_one_case.sh ...
+```
+
+Behavior on a Spot VM:
+
+- Graceful shutdown window is whatever GCP Batch's default is for Spot (currently ~30 s). Batch's `InstancePolicy` does not expose the longer 120 s GCE preemption-notice option; the design's continuous rsync is sized for 30 s.
+- The runtime continuously rsyncs solver state to `gs://<bucket>/checkpoints/CASE_ID/VARIANT_ID/latest/` (event-driven, additive — no tar/gzip during the run).
+- On preemption (SIGTERM): runtime kills the solver, runs one final rsync, writes `preempted.json`, copies attempt logs to `results/.../task_<i>/attempts/<RUN_TS>/`, exits 50001 (Batch's documented Spot-preemption code; Batch detects preemption itself and labels the task with this code regardless of the runnable's actual exit value).
+- A `lifecyclePolicies` rule classifies exit 50001 as `RETRY_TASK`; Batch reschedules on a fresh VM up to `maxRetryCount` times.
+- The retry attempt detects the GCS checkpoint, restores it, forces `startFrom latestTime`, and resumes from where it left off.
+
+The checkpoint is automatically deleted from GCS on a successful run. Orphan checkpoints are cleaned by a one-time bucket lifecycle rule (see "GCS Lifecycle" below).
+
 ## What Each Script Does
 
 ### `scripts/prof/professor_upload_case.sh`
@@ -221,6 +255,29 @@ gs://openfoam_cases/
           result.tar.gz
           _SUCCESS | _FAILED
 ```
+
+## GCS Lifecycle Rule
+
+Apply once per bucket:
+
+```bash
+cat > /tmp/openfoam-lifecycle.json <<EOF
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "Delete" },
+        "condition": { "age": 30, "matchesPrefix": ["checkpoints/"] }
+      }
+    ]
+  }
+}
+EOF
+gcloud storage buckets update gs://openfoam_cases \
+  --lifecycle-file=/tmp/openfoam-lifecycle.json
+```
+
+This deletes any object under `checkpoints/` older than 30 days. `cases/`, `results/`, and `submissions/` are untouched.
 
 ## Why `READY` Exists
 
@@ -505,19 +562,19 @@ Current test baseline:
 - local SSD count: `1`
 - max run duration: `43200s`
 
-Local SSD note:
+New env-var knobs (Phase C/D additions):
 
-- `LOCAL_SSD_COUNT` means the number of `local-ssd` devices attached to the VM
-- the current runtime mounts only the first attached local SSD at `/mnt/disks/openfoam-scratch`
-- if you use a count like `2` for a machine-family constraint such as `c2d-standard-32`, the extra SSDs are attached but not striped together
-- not all machine families support local SSDs (e.g. `c3d`, `h3` do not)
-- when `LOCAL_SSD_COUNT=0`, the runtime script falls back to `/tmp/openfoam-scratch` on the boot disk
+- `PROVISIONING_MODEL` — `STANDARD` (default) or `SPOT`.
+- `MAX_RETRY_COUNT` — Batch task retries on top of the original attempt; default `3`.
+- `SCRATCH_DISK_TYPE` — when `LOCAL_SSD_COUNT=0`, the type of the attached scratch PD; default `pd-ssd`.
+- `SCRATCH_DISK_GB` — scratch PD size when `LOCAL_SSD_COUNT=0`; default `200`.
+- `CHECKPOINT_POLL_SEC` — runtime poll interval for new timestep dirs; default `30`.
+- `DRY_RUN=1` — submit scripts print the JSON instead of calling `gcloud batch jobs submit`. Used by tests.
 
-Boot disk note:
+Scratch disk note:
 
-- when no local SSD is used, solver scratch goes to the boot disk
-- GCP Batch default boot disk is 30 GB `pd-balanced`
-- to increase size or change type, add a `bootDisk` block inside `policy` in the job JSON (see commented example in `submit_one_case.sh` around line 115)
+- `LOCAL_SSD_COUNT > 0` (only on families that support it, e.g. `c2d`): one or more 375 GB local SSDs attached, mounted at `/mnt/disks/openfoam-scratch`.
+- `LOCAL_SSD_COUNT = 0` (e.g. `c3d`, `h3`): one attached pd-ssd of `${SCRATCH_DISK_GB}` GB, mounted at the same path. The boot disk is no longer used as scratch fallback; missing scratch is now a hard error in the runtime.
 
 Prior reference note:
 
@@ -640,3 +697,13 @@ The intended workflow is:
 - admin validates and submits
 - Batch executes one job per case
 - results return to GCS
+
+## Tests
+
+Local bash tests covering submit-script JSON shape and runtime helper functions:
+
+```bash
+bash openfoam-batch/tests/run_all.sh
+```
+
+Tests use PATH-stubbed `gcloud` and `foamDictionary`; no GCP credentials needed. End-to-end testing against a real GCP project is manual and documented in the implementation plan.

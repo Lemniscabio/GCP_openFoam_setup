@@ -24,7 +24,7 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
 ENV BASH_ENV=/opt/openfoam12/etc/bashrc
 
 # Batch entrypoint script that downloads the case, runs it, and uploads results.
-COPY scripts/admin/run_case_in_batch.sh /opt/openfoam-batch/run_case_in_batch.sh
+COPY runtime/run_case_in_batch.sh /opt/openfoam-batch/run_case_in_batch.sh
 RUN chmod +x /opt/openfoam-batch/run_case_in_batch.sh
 
 WORKDIR /root

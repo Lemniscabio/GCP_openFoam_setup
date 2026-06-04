@@ -1,20 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ask() {
-  local prompt="$1"
-  local default_value="${2:-}"
-  local value=""
-
-  if [[ -n "${default_value}" ]]; then
-    read -rp "${prompt} [${default_value}]: " value
-    printf '%s\n' "${value:-$default_value}"
-  else
-    read -rp "${prompt}: " value
-    printf '%s\n' "${value}"
-  fi
-}
-
 sanitize_job_part() {
   local value="$1"
   value="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-')"
@@ -22,75 +8,61 @@ sanitize_job_part() {
   printf '%s\n' "${value}"
 }
 
-if [[ $# -gt 11 ]]; then
-  echo "Usage: $0 [PROJECT_ID] [REGION] [IMAGE_URI] [CASE_ID] [VARIANT_ID] [MACHINE_TYPE] [CPU_MILLI] [MPI_RANKS] [MEMORY_MIB] [LOCAL_SSD_COUNT] [MAX_RUN_DURATION]" >&2
+if [[ $# -lt 11 ]]; then
+  cat >&2 <<EOF
+Usage: $0 PROJECT_ID REGION IMAGE_URI VARIANT_ID MACHINE_TYPE \\
+  CPU_MILLI MPI_RANKS MEMORY_MIB LOCAL_SSD_COUNT MAX_RUN_DURATION \\
+  CASE_ID [CASE_ID ...]
+EOF
   exit 1
 fi
 
-PROJECT_ID="${1:-}"
-REGION="${2:-}"
-IMAGE_URI="${3:-}"
-CASE_ID="${4:-}"
-VARIANT_ID="${5:-}"
-MACHINE_TYPE="${6:-}"
-CPU_MILLI="${7:-}"
-MPI_RANKS="${8:-}"
-MEMORY_MIB="${9:-}"
-LOCAL_SSD_COUNT="${10:-}"
-MAX_RUN_DURATION="${11:-}"
+PROJECT_ID="$1"; REGION="$2"; IMAGE_URI="$3"
+VARIANT_ID="$4"; MACHINE_TYPE="$5"
+CPU_MILLI="$6"; MPI_RANKS="$7"; MEMORY_MIB="$8"
+LOCAL_SSD_COUNT="$9"; MAX_RUN_DURATION="${10}"
+shift 10
+CASE_IDS=("$@")
 
-PROJECT_ID="${PROJECT_ID:-$(ask "GCP project ID" "project-688a4c78-5d5b-45b3-b5d")}"
-REGION="${REGION:-$(ask "GCP region" "us-central1")}"
-IMAGE_URI="${IMAGE_URI:-$(ask "Container image URI" "docker.io/kartikeyattri/openfoam")}"
-CASE_ID="${CASE_ID:-$(ask "Case ID" "case_0002")}"
-VARIANT_ID="${VARIANT_ID:-$(ask "Variant label" "fixed")}"
-MACHINE_TYPE="${MACHINE_TYPE:-$(ask "Machine type" "c2d-standard-16")}"
-CPU_MILLI="${CPU_MILLI:-$(ask "CPU milli" "16000")}"
-MPI_RANKS="${MPI_RANKS:-$(ask "MPI ranks" "8")}"
-MEMORY_MIB="${MEMORY_MIB:-$(ask "Memory MiB" "65536")}"
-LOCAL_SSD_COUNT="${LOCAL_SSD_COUNT:-$(ask "Local SSD count" "1")}"
-MAX_RUN_DURATION="${MAX_RUN_DURATION:-$(ask "Max run duration" "43200s")}"
+if [[ ${#CASE_IDS[@]} -eq 0 ]]; then
+  echo "At least one CASE_ID is required" >&2
+  exit 1
+fi
+
 PROVISIONING_MODEL="${PROVISIONING_MODEL:-STANDARD}"
 MAX_RETRY_COUNT="${MAX_RETRY_COUNT:-3}"
+SCRATCH_DISK_TYPE="${SCRATCH_DISK_TYPE:-pd-ssd}"
+SCRATCH_DISK_GB="${SCRATCH_DISK_GB:-200}"
 
-# Edit this one line if the bucket changes.
 GCS_BUCKET="openfoam_cases"
 BUCKET="${GCS_BUCKET}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+
 JOB_TS="$(date +%Y%m%d%H%M%S)"
-JOB_CASE_ID="$(sanitize_job_part "${CASE_ID}")"
 JOB_VARIANT_ID="$(sanitize_job_part "${VARIANT_ID}")"
-JOB_NAME="of-${JOB_CASE_ID}-${JOB_VARIANT_ID}-${JOB_TS}"
-SUBMISSION_MARKER="gs://${BUCKET}/submissions/${CASE_ID}/${VARIANT_ID}.latest.json"
+JOB_NAME="of-multi-${JOB_VARIANT_ID}-${JOB_TS}"
 CONFIG_PATH="${TMP_DIR}/${JOB_NAME}.json"
-META_PATH="${TMP_DIR}/${JOB_NAME}.meta.json"
 
-cleanup() {
-  rm -rf "${TMP_DIR}"
-}
-trap cleanup EXIT
-
+# Validate every case prefix unless DRY_RUN.
 if [[ "${DRY_RUN:-0}" != "1" ]]; then
-  "${SCRIPT_DIR}/check_case_prefix.sh" "${CASE_ID}"
-fi
-
-if [[ "${DRY_RUN:-0}" != "1" ]] \
-   && gcloud storage ls "${SUBMISSION_MARKER}" >/dev/null 2>&1 \
-   && [[ "${FORCE_SUBMIT:-0}" != "1" ]]; then
-  echo "Submission marker exists for case=${CASE_ID} variant=${VARIANT_ID}" >&2
-  echo "Set FORCE_SUBMIT=1 if you want to submit again." >&2
-  exit 1
-fi
-
-if [[ "${DRY_RUN:-0}" != "1" ]]; then
+  for cid in "${CASE_IDS[@]}"; do
+    "${SCRIPT_DIR}/check_case_prefix.sh" "${cid}"
+  done
+  for cid in "${CASE_IDS[@]}"; do
+    marker="gs://${BUCKET}/submissions/${cid}/${VARIANT_ID}.latest.json"
+    if gcloud storage ls "${marker}" >/dev/null 2>&1 && [[ "${FORCE_SUBMIT:-0}" != "1" ]]; then
+      echo "Submission marker exists for case=${cid} variant=${VARIANT_ID}" >&2
+      echo "Set FORCE_SUBMIT=1 to override." >&2
+      exit 1
+    fi
+  done
   gcloud config set project "${PROJECT_ID}" >/dev/null
 fi
 
-SCRATCH_DISK_TYPE="${SCRATCH_DISK_TYPE:-pd-ssd}"
-SCRATCH_DISK_GB="${SCRATCH_DISK_GB:-200}"
-
+# Build disks block (same logic as submit_one_case.sh).
 DISKS_BLOCK=$'          "disks": [\n'
 if [[ "${LOCAL_SSD_COUNT}" != "0" ]]; then
   for ((i = 1; i <= LOCAL_SSD_COUNT; i++)); do
@@ -129,34 +101,35 @@ VOLUMES_BLOCK=$(cat <<EOF
 EOF
 )
 
+CASE_ID_LIST_CSV="$(IFS=,; printf '%s' "${CASE_IDS[*]}")"
+TASK_COUNT=${#CASE_IDS[@]}
+
 cat > "${CONFIG_PATH}" <<EOF
 {
   "taskGroups": [
     {
-      "taskCount": 1,
-      "parallelism": 1,
+      "taskCount": ${TASK_COUNT},
+      "parallelism": ${TASK_COUNT},
       "taskSpec": {
         "runnables": [
           {
             "container": {
               "imageUri": "${IMAGE_URI}",
               "entrypoint": "/bin/bash",
-              "commands": [
-                "-lc",
-                "/opt/openfoam-batch/run_case_in_batch.sh"
-              ]
+              "commands": ["-lc", "/opt/openfoam-batch/run_case_in_batch.sh"]
             }
           }
         ],
         "environment": {
           "variables": {
             "BUCKET": "${BUCKET}",
-            "CASE_ID": "${CASE_ID}",
+            "CASE_ID_LIST": "${CASE_ID_LIST_CSV}",
             "VARIANT_ID": "${VARIANT_ID}",
             "JOB_NAME": "${JOB_NAME}",
             "CPU_MILLI": "${CPU_MILLI}",
             "MPI_RANKS": "${MPI_RANKS}",
-            "SCRATCH_ROOT": "/mnt/disks/openfoam-scratch"
+            "SCRATCH_ROOT": "/mnt/disks/openfoam-scratch",
+            "CHECKPOINT_POLL_SEC": "${CHECKPOINT_POLL_SEC:-30}"
           }
         },
         "computeResource": {
@@ -186,12 +159,8 @@ ${DISKS_BLOCK}
       }
     ]
   },
-  "logsPolicy": {
-    "destination": "CLOUD_LOGGING"
-  },
-  "labels": {
-    "app": "openfoam"
-  }
+  "logsPolicy": { "destination": "CLOUD_LOGGING" },
+  "labels": { "app": "openfoam" }
 }
 EOF
 
@@ -204,21 +173,25 @@ gcloud batch jobs submit "${JOB_NAME}" \
   --location "${REGION}" \
   --config "${CONFIG_PATH}"
 
-cat > "${META_PATH}" <<EOF
+# Write one submission marker per case.
+for idx in "${!CASE_IDS[@]}"; do
+  cid="${CASE_IDS[${idx}]}"
+  META_PATH="${TMP_DIR}/marker_${idx}.json"
+  cat > "${META_PATH}" <<EOF
 {
   "project_id": "${PROJECT_ID}",
   "region": "${REGION}",
   "bucket": "${BUCKET}",
-  "case_id": "${CASE_ID}",
+  "case_id": "${cid}",
   "variant_id": "${VARIANT_ID}",
   "job_name": "${JOB_NAME}",
+  "task_index": ${idx},
   "machine_type": "${MACHINE_TYPE}",
   "submitted_at_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
+  gcloud storage cp "${META_PATH}" \
+    "gs://${BUCKET}/submissions/${cid}/${VARIANT_ID}.latest.json"
+done
 
-if [[ "${DRY_RUN:-0}" != "1" ]]; then
-  gcloud storage cp "${META_PATH}" "${SUBMISSION_MARKER}"
-fi
-
-echo "Submitted ${JOB_NAME}"
+echo "Submitted ${JOB_NAME} (${TASK_COUNT} tasks)"

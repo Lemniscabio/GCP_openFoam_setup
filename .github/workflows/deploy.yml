@@ -1,0 +1,66 @@
+name: deploy
+on:
+  push: { branches: [main] }
+  pull_request: {}
+permissions: { contents: read, id-token: write }
+
+env:
+  PROJECT_ID: cfd-lemnisca
+  REGION: us-central1
+  SERVICE: of-batch-app
+  IMAGE: us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend
+  RUNTIME_IMAGE: us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.1
+  BACKEND_SA: of-batch-backend@cfd-lemnisca.iam.gserviceaccount.com
+  ALLOWED_DOMAIN: lemnisca.bio
+
+jobs:
+  # ---- test gate (always: PRs and main) ----
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Backend + runtime tests
+        run: |
+          cd phase3-run-app
+          pip install -e ".[dev]" -r requirements-backend.txt
+          OF_DEV_NO_IAP=1 pytest -q
+          cd .. && bash openfoam-batch/tests/run_all.sh
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Frontend tests
+        run: cd phase3-run-app/frontend && npm ci && npx vitest run
+
+  # ---- build + deploy (only on push to main, after tests pass) ----
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/380489820300/locations/global/workloadIdentityPools/of-github-pool/providers/github-provider
+          service_account: of-ci-deployer@cfd-lemnisca.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build + push backend image (SPA bundled), tagged by commit SHA
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          docker buildx build --platform linux/amd64 \
+            --build-arg VITE_OAUTH_CLIENT_ID=${{ vars.OAUTH_CLIENT_ID }} \
+            -f phase3-run-app/backend/Dockerfile \
+            -t ${IMAGE}:${{ github.sha }} \
+            -t ${IMAGE}:latest \
+            --push phase3-run-app
+      - name: Deploy to Cloud Run (public ingress; app-level Google auth)
+        run: |
+          gcloud run deploy ${SERVICE} \
+            --image ${IMAGE}:${{ github.sha }} \
+            --region ${REGION} \
+            --service-account ${BACKEND_SA} \
+            --allow-unauthenticated \
+            --update-env-vars OF_OAUTH_CLIENT_ID=${{ vars.OAUTH_CLIENT_ID }},OF_ALLOWED_DOMAIN=${ALLOWED_DOMAIN},OF_IMAGE_URI=${RUNTIME_IMAGE} \
+            --project ${PROJECT_ID}
