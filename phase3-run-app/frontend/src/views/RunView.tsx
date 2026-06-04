@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { usePanelVariants } from "@/lib/motion";
 import { api } from "../lib/client";
 import { MACHINES } from "../lib/machines";
 
@@ -7,6 +10,7 @@ export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitt
   const [spot, setSpot] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const panelVariants = usePanelVariants();
 
   const mode = caseIds.length > 1 ? "multi-task" : "single";
 
@@ -27,7 +31,14 @@ export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitt
 
   if (caseIds.length === 0) {
     return (
-      <div className="step" style={{ gridTemplateColumns: "1fr" }}>
+      <motion.div
+        className="step"
+        style={{ gridTemplateColumns: "1fr" }}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        variants={panelVariants}
+      >
         <div className="panel">
           <div className="panel-head">
             <div className="ph-num">03</div>
@@ -38,12 +49,18 @@ export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitt
           </div>
           <div className="panel-body"><div className="empty-state">No cases selected.</div></div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="step">
+    <motion.div
+      className="step"
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={panelVariants}
+    >
       <div className="panel">
         <div className="panel-head">
           <div className="ph-num">03</div>
@@ -76,11 +93,11 @@ export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitt
             </div>
           </div>
           <div className="row-end">
-            <button className="btn-add" disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Run job"}</button>
+            <Button disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Run job"}</Button>
           </div>
           {msg && <div className="empty-state" style={{ fontStyle: "normal" }}>{msg}</div>}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

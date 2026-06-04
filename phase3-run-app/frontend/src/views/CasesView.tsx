@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useListItemVariants, usePanelVariants } from "@/lib/motion";
 import { api, type CaseInfo } from "../lib/client";
 
 export function CasesView({ onRun }: { onRun: (caseIds: string[]) => void }) {
@@ -6,6 +10,8 @@ export function CasesView({ onRun }: { onRun: (caseIds: string[]) => void }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const panelVariants = usePanelVariants();
+  const listVariants = useListItemVariants();
 
   async function refresh() {
     setLoading(true);
@@ -30,7 +36,14 @@ export function CasesView({ onRun }: { onRun: (caseIds: string[]) => void }) {
   }
 
   return (
-    <div className="step" style={{ gridTemplateColumns: "1fr" }}>
+    <motion.div
+      className="step"
+      style={{ gridTemplateColumns: "1fr" }}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={panelVariants}
+    >
       <div className="panel">
         <div className="panel-head">
           <div className="ph-num">02</div>
@@ -38,27 +51,35 @@ export function CasesView({ onRun }: { onRun: (caseIds: string[]) => void }) {
             <div className="ph-title">Cases</div>
             <div className="ph-sub">{loading ? "loading…" : `${cases.length} case(s) in cfd-lemnisca-cases`}</div>
           </div>
-          <button className="btn-add" onClick={refresh}>Refresh</button>
+          <Button variant="outline" size="sm" onClick={refresh}>Refresh</Button>
         </div>
         <div className="panel-body">
           {err && <div className="empty-state">Error: {err}</div>}
           {!err && cases.length === 0 && !loading && <div className="empty-state">No cases yet — upload some.</div>}
           <div className="stack">
-            {cases.map((c) => (
-              <label className="stack-item" key={c.case_id} style={{ cursor: "pointer" }}>
+            {cases.map((c, index) => (
+              <motion.label
+                className="stack-item"
+                key={c.case_id}
+                custom={index}
+                variants={listVariants}
+                initial="hidden"
+                animate="visible"
+                style={{ cursor: "pointer" }}
+              >
                 <input type="checkbox" checked={sel.has(c.case_id)} onChange={() => toggle(c.case_id)} disabled={!c.ready} />
                 <span className="stack-id">{c.case_id}</span>
-                <span className="stack-path">{c.ready ? "READY" : "incomplete"}</span>
-              </label>
+                <Badge variant={c.ready ? "default" : "secondary"}>{c.ready ? "READY" : "incomplete"}</Badge>
+              </motion.label>
             ))}
           </div>
           <div className="row-end">
-            <button className="btn-add" disabled={sel.size === 0} onClick={() => onRun([...sel])}>
+            <Button disabled={sel.size === 0} onClick={() => onRun([...sel])}>
               Run {sel.size || ""} selected →
-            </button>
+            </Button>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

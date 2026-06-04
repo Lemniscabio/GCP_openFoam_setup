@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // Dev server runs on :8080 (matches the OAuth client's JS origins + bucket CORS).
 // /api/* is proxied to the deployed Cloud Run backend so local UI work hits the
@@ -11,7 +12,7 @@ const API_TARGET =
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 8080,
     proxy: {

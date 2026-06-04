@@ -1,4 +1,8 @@
 import { useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { useListItemVariants, usePanelVariants } from "@/lib/motion";
 import { api } from "../lib/client";
 import { runPool, putFile } from "../lib/upload";
 
@@ -36,6 +40,8 @@ export function UploadView() {
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  const panelVariants = usePanelVariants();
+  const listVariants = useListItemVariants();
 
   const say = (m: string) => setLog((l) => [...l, m]);
 
@@ -82,7 +88,13 @@ export function UploadView() {
   const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
-    <div className="step">
+    <motion.div
+      className="step"
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={panelVariants}
+    >
       <div className="panel">
         <div className="panel-head">
           <div className="ph-num">01</div>
@@ -105,23 +117,31 @@ export function UploadView() {
               <span>bulk: a parent folder whose subfolders are cases · single: one case folder</span>
             </div>
           </div>
+          {busy && <Progress value={pct} className="h-1.5" />}
           {/* @ts-expect-error webkitdirectory is non-standard */}
           <input ref={inputRef} type="file" webkitdirectory="" directory="" hidden
                  onChange={(e) => onPicked(e.target.files)} />
           {cases.length > 0 && (
             <div className="stack">
-              {cases.map((c) => (
-                <div className="stack-item" key={c.name}>
+              {cases.map((c, index) => (
+                <motion.div
+                  className="stack-item"
+                  key={c.name}
+                  custom={index}
+                  variants={listVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
                   <span className="stack-id">{c.name}</span>
                   <span className="stack-path">{c.files.length} files</span>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
           <div className="row-end">
-            <button className="btn-add" disabled={!cases.length || busy} onClick={upload}>
+            <Button disabled={!cases.length || busy} onClick={upload}>
               {busy ? `Uploading… ${pct}%` : `Upload ${cases.length || ""} case(s)`}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -143,6 +163,6 @@ export function UploadView() {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

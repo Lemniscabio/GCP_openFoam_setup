@@ -1,4 +1,7 @@
 import { type ReactNode } from "react";
+import { motion } from "framer-motion";
+
+import { usePanelVariants } from "@/lib/motion";
 
 export type Tab = "upload" | "cases" | "run" | "runs";
 const TABS: { id: Tab; n: string; label: string }[] = [
@@ -17,10 +20,17 @@ export function AppShell({
   onTab: (t: Tab) => void;
   children: ReactNode;
 }) {
+  const panelVariants = usePanelVariants();
+
   return (
     <>
       <div className="bg" />
-      <div className="app">
+      <motion.div
+        className="app"
+        initial="hidden"
+        animate="visible"
+        variants={panelVariants}
+      >
         <div className="header">
           <div className="brand">
             <div className="brand-mark">OF</div>
@@ -47,7 +57,7 @@ export function AppShell({
           </div>
         </div>
         <div className="stage">{children}</div>
-      </div>
+      </motion.div>
     </>
   );
 }
