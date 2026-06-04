@@ -253,6 +253,12 @@ button {
   min-height: 0;
 }
 
+.step {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+}
+
 .panel {
   position: relative;
   display: flex;

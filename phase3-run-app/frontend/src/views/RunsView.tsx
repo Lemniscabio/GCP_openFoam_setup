@@ -45,13 +45,37 @@ export function RunsView() {
           {!err && runs.length === 0 && <div className="empty-state">No runs yet.</div>}
           <div className="stack">
             {runs.map((r) => (
-              <div className="stack-item" key={r.job_name} style={{ gridTemplateColumns: "1fr auto auto" }}>
-                <span className="stack-path" title={r.job_name}>{r.job_name}</span>
-                <span style={{ fontFamily: "var(--f-mono)", fontSize: 11.5, color: STATE_COLOR[r.state] ?? "var(--ink-2)" }}>
+              <div
+                className="stack-item"
+                key={r.job_name}
+                style={{ display: "grid", gridTemplateColumns: "1fr auto auto", alignItems: "center", gap: 12, minWidth: 0 }}
+              >
+                <span
+                  title={r.job_name}
+                  style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--f-mono)", fontSize: 12, color: "var(--ink-2)" }}
+                >
+                  {r.job_name}
+                </span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    flexShrink: 0,
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    fontFamily: "var(--f-mono)",
+                    whiteSpace: "nowrap",
+                    color: STATE_COLOR[r.state] ?? "var(--ink-2)",
+                    background: (STATE_COLOR[r.state] ?? "#888") + "18",
+                    border: "1px solid " + (STATE_COLOR[r.state] ?? "#888") + "30",
+                  }}
+                >
                   {r.state}{r.progress_pct != null ? ` · ${r.progress_pct}%` : ""}
                 </span>
                 <a className="btn-add" href={consoleUrl(r.job_name)} target="_blank" rel="noreferrer"
-                   style={{ padding: "4px 10px", fontSize: 11.5 }}>Console ↗</a>
+                   style={{ flexShrink: 0, padding: "4px 10px", fontSize: 11.5 }}>Console ↗</a>
               </div>
             ))}
           </div>
