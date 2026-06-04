@@ -6,7 +6,10 @@ import { OAUTH_CLIENT_ID, ALLOWED_DOMAIN } from "../lib/client";
 // A non-@lemnisca.bio account gets a friendly "not authorized" screen (the backend
 // enforces this for real via the hd claim; this is just clean UX).
 export function SignInGate({ children }: { children: ReactNode }) {
-  const [email, setEmail] = useState<string | null>(() => (tokenStore.get() ? "" : null));
+  // restore a persisted session (survives refresh) — email comes back too
+  const [email, setEmail] = useState<string | null>(() =>
+    tokenStore.get() ? tokenStore.getEmail() || "" : null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,6 +23,22 @@ export function SignInGate({ children }: { children: ReactNode }) {
     } catch (e) {
       setError(String(e));
     }
+  }, [email]);
+
+  // Auto-return to sign-in when the 60-min session expires (no manual refresh needed).
+  useEffect(() => {
+    if (email === null) return;
+    const ms = tokenStore.expiresAt() - Date.now();
+    if (ms <= 0) {
+      tokenStore.clear();
+      setEmail(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      tokenStore.clear();
+      setEmail(null);
+    }, ms);
+    return () => clearTimeout(t);
   }, [email]);
 
   const authorized = email === "" || (!!email && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`));
