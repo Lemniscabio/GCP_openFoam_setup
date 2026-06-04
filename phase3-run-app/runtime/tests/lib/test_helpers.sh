@@ -2,8 +2,8 @@
 # Shared test helpers. Source from each test file.
 set -u
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-TESTS_LIB_DIR="${REPO_ROOT}/openfoam-batch/tests/lib"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+TESTS_LIB_DIR="${REPO_ROOT}/phase3-run-app/runtime/tests/lib"
 STUBS_DIR="${TESTS_LIB_DIR}/stubs"
 
 # Failures

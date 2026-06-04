@@ -18,7 +18,7 @@ def allocate(
     urls=Depends(url_service),
 ):
     ids = repo.allocate_ids(len(req.cases))
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     cases = []
     for case_id, case in zip(ids, req.cases):
         uploads = urls.put_urls_for_case(case_id, case.files, now)
@@ -45,7 +45,7 @@ def finalize(
     user: User = Depends(current_user),
     store=Depends(storage),
 ):
-    uploaded_at = datetime.datetime.utcnow().isoformat() + "Z"
+    uploaded_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     manifest = {
         "case_id": case_id,
         "solver_family": "openfoam",
