@@ -70,17 +70,25 @@ export const tokenStore = new TokenStore();
 // Initialize Google Identity Services and prompt for sign-in.
 // clientId = import.meta.env.VITE_OAUTH_CLIENT_ID
 export function initGoogleSignIn(clientId: string, onSignedIn: (email: string) => void) {
-  // @ts-expect-error google is injected by the GIS script in index.html
-  const g = google.accounts.id;
-  g.initialize({
-    client_id: clientId,
-    callback: (resp: { credential: string }) => {
-      const claims = JSON.parse(atob(resp.credential.split(".")[1]));
-      tokenStore.set(resp.credential, (claims.exp ?? 0) * 1000, claims.email);
-      onSignedIn(claims.email);
-    },
-  });
-  const btn = document.getElementById("gsi-button");
-  if (btn) g.renderButton(btn, { theme: "outline", size: "large", text: "signin_with" });
-  g.prompt(); // also show One Tap
+  const start = (attempt = 0) => {
+    // GIS script (index.html) is async — wait until window.google is ready.
+    const g = (window as unknown as { google?: { accounts?: { id?: any } } }).google?.accounts?.id;
+    if (!g) {
+      if (attempt > 100) throw new Error("Google sign-in script failed to load");
+      setTimeout(() => start(attempt + 1), 100);
+      return;
+    }
+    g.initialize({
+      client_id: clientId,
+      callback: (resp: { credential: string }) => {
+        const claims = JSON.parse(atob(resp.credential.split(".")[1]));
+        tokenStore.set(resp.credential, (claims.exp ?? 0) * 1000, claims.email);
+        onSignedIn(claims.email);
+      },
+    });
+    const btn = document.getElementById("gsi-button");
+    if (btn) g.renderButton(btn, { theme: "outline", size: "large", text: "signin_with" });
+    g.prompt(); // also show One Tap
+  };
+  start();
 }
