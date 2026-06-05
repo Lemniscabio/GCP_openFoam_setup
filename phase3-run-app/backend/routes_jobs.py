@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import logging
 
@@ -88,8 +89,8 @@ def submit(
 
 
 @router.get("/jobs")
-def list_runs(user: User = Depends(current_user), st=Depends(status_service)):
-    return {"runs": [r.__dict__ for r in st.list_runs()]}
+def list_runs(user: User = Depends(current_user), runs=Depends(run_repo)):
+    return {"runs": [dataclasses.asdict(r) for r in runs.list_recent()]}
 
 
 @router.get("/jobs/{job_name}")
