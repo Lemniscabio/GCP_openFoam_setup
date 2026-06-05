@@ -7,11 +7,14 @@ from fastapi.testclient import TestClient
 
 from backend import deps
 from backend.main import app
+from core.case_records import InMemoryCaseRecordRepository
 from core.cases import CaseRepository
 from core.storage import InMemoryStorage
 
 _store = InMemoryStorage()
+_case_records = InMemoryCaseRecordRepository()
 app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(_store)
+app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
 app.dependency_overrides[deps.storage] = lambda: _store
 
 
@@ -35,6 +38,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def _override_deps():
     app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(_store)
+    app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
     app.dependency_overrides[deps.storage] = lambda: _store
     app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
 
@@ -105,3 +109,15 @@ def test_finalize_accepts_optional_name():
     assert req.name == "Wind Tunnel v3"
     # name is optional; omitting it is allowed
     assert FinalizeReq().name is None
+
+
+def test_finalize_writes_case_record(client, mem_storage, mem_case_records):
+    # arrange a reserved+uploaded case
+    mem_storage.create_exclusive("cases/case_0006/.reserved", b"")
+    mem_storage.upload_bytes("cases/case_0006/case/command.sh", b"# MPI_RANKS")
+    r = client.post("/api/cases/case_0006:finalize", json={"name": "Wind Tunnel v3"})
+    assert r.status_code == 200
+    rec = mem_case_records.get("case_0006")
+    assert rec is not None
+    assert rec.name == "Wind Tunnel v3"
+    assert rec.ready is True

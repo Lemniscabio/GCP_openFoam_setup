@@ -6,8 +6,10 @@ from google.cloud import batch_v1
 from google.cloud import storage as gcs
 
 from core.batch_jobs import BatchJobBuilder, BatchSubmitter
+from core.case_records import FirestoreCaseRecordRepository
 from core.cases import CaseRepository
 from core.config import Settings
+from core.run_repo import FirestoreRunRepository
 from core.status import RunStatusService
 from core.storage import GcsStorage
 from core.uploads import SignedUrlService
@@ -66,3 +68,18 @@ def submitter() -> BatchSubmitter:
 def status_service() -> RunStatusService:
     s = settings()
     return RunStatusService(batch_v1.BatchServiceClient(), storage(), s.project_id, s.region)
+
+
+@lru_cache
+def _firestore():
+    from google.cloud import firestore
+
+    return firestore.Client(project=settings().project_id, database=settings().firestore_database)
+
+
+def case_record_repo() -> FirestoreCaseRecordRepository:
+    return FirestoreCaseRecordRepository(_firestore())
+
+
+def run_repo() -> FirestoreRunRepository:
+    return FirestoreRunRepository(_firestore())
