@@ -37,28 +37,69 @@ chmod +x "${CASE_DIR}/command.sh"   # command.sh comes down inside the case tree
 # resume from checkpoint if present
 if gcloud storage ls "${CHECKPOINT_PREFIX}/" >/dev/null 2>&1; then
   echo "Resuming from ${CHECKPOINT_PREFIX}"
-  gcloud storage rsync --recursive "${CHECKPOINT_PREFIX}/" "${CASE_DIR}/" || true
+  gcloud storage rsync --recursive "${CHECKPOINT_PREFIX}/" "${CASE_DIR}/"
   command -v foamDictionary >/dev/null 2>&1 && \
     foamDictionary "${CASE_DIR}/system/controlDict" -entry startFrom -set latestTime || true
 fi
 
 CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
-sync_checkpoint() {   # FIXED: iterate real processor dirs; no quoted-glob passed to gcloud
+CHECKPOINT_SYNC_FAILURES=0
+
+checkpoint_rsync() {
+  local src="$1" dst="$2"
+  if ! gcloud storage rsync --recursive "${src}" "${dst}"; then
+    CHECKPOINT_SYNC_FAILURES=$((CHECKPOINT_SYNC_FAILURES + 1))
+    echo "checkpoint sync failed (${CHECKPOINT_SYNC_FAILURES}): ${src} -> ${dst}" >&2
+  fi
+}
+
+numeric_time_dirs() {
   local p name
-  for p in "${CASE_DIR}"/processor*/; do
+  for p in "$@"; do
     [[ -d "${p}" ]] || continue
     name="$(basename "${p}")"
-    gcloud storage rsync --recursive "${p}" "${CHECKPOINT_PREFIX}/${name}/" || true
+    [[ "${name}" =~ ^[0-9]+([.][0-9]+)?$ ]] && printf '%s\n' "${name}"
   done
+}
+
+newest_checkpoint_time() {
+  {
+    numeric_time_dirs "${CASE_DIR}/processor0"/*/
+    numeric_time_dirs "${CASE_DIR}"/*/
+  } | sort -n | tail -1
+}
+
+sync_checkpoint() {   # FIXED: iterate real processor dirs; no quoted-glob passed to gcloud
+  local p name has_processors=0
+  for p in "${CASE_DIR}"/processor*/; do
+    [[ -d "${p}" ]] || continue
+    has_processors=1
+    name="$(basename "${p}")"
+    checkpoint_rsync "${p}" "${CHECKPOINT_PREFIX}/${name}/"
+  done
+  if [[ "${has_processors}" -eq 0 ]]; then
+    for p in "${CASE_DIR}"/*/; do
+      [[ -d "${p}" ]] || continue
+      name="$(basename "${p}")"
+      [[ "${name}" =~ ^[0-9]+([.][0-9]+)?$ ]] || continue
+      checkpoint_rsync "${p}" "${CHECKPOINT_PREFIX}/${name}/"
+    done
+    [[ -d "${CASE_DIR}/constant" ]] && \
+      checkpoint_rsync "${CASE_DIR}/constant" "${CHECKPOINT_PREFIX}/constant/"
+  fi
   [[ -d "${CASE_DIR}/system" ]] && \
-    gcloud storage rsync --recursive "${CASE_DIR}/system" "${CHECKPOINT_PREFIX}/system/" || true
+    checkpoint_rsync "${CASE_DIR}/system" "${CHECKPOINT_PREFIX}/system/"
 }
 
 checkpoint_loop() {
   local last="" newest
   while true; do
     sleep "${CHECKPOINT_POLL_SEC}"
-    newest="$(ls -1 "${CASE_DIR}/processor0" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -n | tail -1)"
+    newest="$(newest_checkpoint_time || true)"
+    if [[ -z "${newest}" ]]; then
+      echo "No checkpointable state yet"
+      continue
+    fi
     if [[ -n "${newest}" && "${newest}" != "${last}" ]]; then sync_checkpoint; last="${newest}"; fi
   done
 }
@@ -82,9 +123,9 @@ checkpoint_loop & CHECKPOINT_PID=$!
 trap on_term TERM INT
 
 set +e
-setsid bash ./command.sh 2>&1 | tee "${STAGE_DIR}/solver.stdout.log" &
+setsid bash ./command.sh > >(tee "${STAGE_DIR}/solver.stdout.log") 2>&1 &
 SOLVER_PID=$!
-SOLVER_PGID="$(ps -o pgid= -p "${SOLVER_PID}" | tr -d ' ' || echo "")"
+SOLVER_PGID="$(ps -o pgid= -p "${SOLVER_PID}" | tr -d ' ' || true)"
 wait "${SOLVER_PID}"; rc=$?
 set -e
 

@@ -79,11 +79,23 @@ def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version):
 def run(settings: Settings, cases, machine, spot):
     """Submit a single-task (1 case) or multi-task (N cases) Batch job."""
     spec_machine = MachineCatalog().get(machine)
-    builder = BatchJobBuilder(bucket=settings.bucket, image_uri=settings.image_uri)
-    submitter = BatchSubmitter(settings.project_id, settings.region)
     prov = "SPOT" if spot else "STANDARD"
     ts = _now_ts()
     ids = [canonical_case_id(c) for c in cases]
+    storage = GcsStorage(settings.bucket)
+    errors = {}
+    for case_id in ids:
+        result = validate_case(storage, case_id)
+        if not result.ok:
+            errors[case_id] = result.errors
+    if errors:
+        for case_id, case_errors in errors.items():
+            for error in case_errors:
+                click.echo(f"FAIL {case_id}: {error}", err=True)
+        raise SystemExit(1)
+
+    builder = BatchJobBuilder(bucket=settings.bucket, image_uri=settings.image_uri)
+    submitter = BatchSubmitter(settings.project_id, settings.region)
     common = dict(cpu_milli=spec_machine["cpu_milli"], memory_mib=spec_machine["memory_mib"],
                   mpi_ranks=spec_machine["default_mpi_ranks"], provisioning_model=prov,
                   local_ssd_count=spec_machine["local_ssd_count"])

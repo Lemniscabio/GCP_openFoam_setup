@@ -40,8 +40,9 @@ mkdir -p "${CASE_DIR}/processor0/100" "${CASE_DIR}/processor1/100" "${CASE_DIR}/
 CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
 export CASE_DIR CHECKPOINT_PREFIX
 
-sed -n '/^sync_checkpoint()/,/^}/p' "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/sync_checkpoint.sh"
-source "${TMPDIR_TEST}/sync_checkpoint.sh"
+awk '/^CHECKPOINT_POLL_SEC=/{emit=1} /^# Minimal stop handler/{emit=0} emit {print}' \
+  "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/checkpoint_functions.sh"
+source "${TMPDIR_TEST}/checkpoint_functions.sh"
 sync_checkpoint
 
 gcloud_calls="$(cat "${GCLOUD_LOG}")"
@@ -49,6 +50,85 @@ assert_contains "rsync --recursive ${CASE_DIR}/processor0/ ${CHECKPOINT_PREFIX}/
 assert_contains "rsync --recursive ${CASE_DIR}/processor1/ ${CHECKPOINT_PREFIX}/processor1/" "${gcloud_calls}" "processor1 rsync recorded"
 assert_not_contains "processor*" "${gcloud_calls}" "literal processor glob not passed to gcloud"
 unset CASE_DIR CHECKPOINT_PREFIX
+teardown_tmp_workspace
+
+start_test "newest checkpoint time handles missing processor0 and serial dirs"
+setup_tmp_workspace
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+mkdir -p "${CASE_DIR}"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+export CASE_DIR CHECKPOINT_PREFIX
+
+awk '/^CHECKPOINT_POLL_SEC=/{emit=1} /^# Minimal stop handler/{emit=0} emit {print}' \
+  "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/checkpoint_functions.sh"
+source "${TMPDIR_TEST}/checkpoint_functions.sh"
+
+newest="$(newest_checkpoint_time)"
+assert_eq "" "${newest}" "empty case has no checkpoint time"
+mkdir -p "${CASE_DIR}/1" "${CASE_DIR}/3.5" "${CASE_DIR}/processor0/2"
+newest="$(newest_checkpoint_time)"
+assert_eq "3.5" "${newest}" "serial and processor0 times are compared"
+unset CASE_DIR CHECKPOINT_PREFIX
+teardown_tmp_workspace
+
+start_test "checkpoint loop survives with no checkpointable state"
+setup_tmp_workspace
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+mkdir -p "${CASE_DIR}"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+export CASE_DIR CHECKPOINT_PREFIX
+
+awk '/^CHECKPOINT_POLL_SEC=/{emit=1} /^# Minimal stop handler/{emit=0} emit {print}' \
+  "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/checkpoint_functions.sh"
+source "${TMPDIR_TEST}/checkpoint_functions.sh"
+CHECKPOINT_POLL_SEC=0.1 checkpoint_loop >"${TMPDIR_TEST}/loop.out" 2>&1 &
+loop_pid=$!
+sleep 0.25
+if ! kill -0 "${loop_pid}" 2>/dev/null; then
+  printf '  FAIL [%s] checkpoint loop exited early\n' "${TEST_NAME}" >&2
+  TEST_FAILURES=$((TEST_FAILURES+1))
+fi
+kill "${loop_pid}" 2>/dev/null || true
+wait "${loop_pid}" 2>/dev/null || true
+assert_contains "No checkpointable state yet" "$(cat "${TMPDIR_TEST}/loop.out")" "empty checkpoint state is logged"
+unset CASE_DIR CHECKPOINT_PREFIX
+teardown_tmp_workspace
+
+start_test "serial checkpoint sync uploads time dirs system and constant"
+setup_tmp_workspace
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+mkdir -p "${CASE_DIR}/1" "${CASE_DIR}/2.5" "${CASE_DIR}/system" "${CASE_DIR}/constant"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+export CASE_DIR CHECKPOINT_PREFIX
+
+awk '/^CHECKPOINT_POLL_SEC=/{emit=1} /^# Minimal stop handler/{emit=0} emit {print}' \
+  "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/checkpoint_functions.sh"
+source "${TMPDIR_TEST}/checkpoint_functions.sh"
+sync_checkpoint
+
+gcloud_calls="$(cat "${GCLOUD_LOG}")"
+assert_contains "rsync --recursive ${CASE_DIR}/1/ ${CHECKPOINT_PREFIX}/1/" "${gcloud_calls}" "serial time 1 rsync recorded"
+assert_contains "rsync --recursive ${CASE_DIR}/2.5/ ${CHECKPOINT_PREFIX}/2.5/" "${gcloud_calls}" "serial time 2.5 rsync recorded"
+assert_contains "rsync --recursive ${CASE_DIR}/system ${CHECKPOINT_PREFIX}/system/" "${gcloud_calls}" "serial system rsync recorded"
+assert_contains "rsync --recursive ${CASE_DIR}/constant ${CHECKPOINT_PREFIX}/constant/" "${gcloud_calls}" "serial constant rsync recorded"
+unset CASE_DIR CHECKPOINT_PREFIX
+teardown_tmp_workspace
+
+start_test "checkpoint write failures are counted and echoed"
+setup_tmp_workspace
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+mkdir -p "${CASE_DIR}/processor0/100" "${CASE_DIR}/system"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+export CASE_DIR CHECKPOINT_PREFIX GCLOUD_FAIL_NEXT=1
+
+awk '/^CHECKPOINT_POLL_SEC=/{emit=1} /^# Minimal stop handler/{emit=0} emit {print}' \
+  "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/checkpoint_functions.sh"
+source "${TMPDIR_TEST}/checkpoint_functions.sh"
+sync_checkpoint 2>"${TMPDIR_TEST}/sync.err"
+
+assert_contains "checkpoint sync failed" "$(cat "${TMPDIR_TEST}/sync.err")" "sync failure echoed"
+assert_eq "2" "${CHECKPOINT_SYNC_FAILURES}" "sync failures counted"
+unset CASE_DIR CHECKPOINT_PREFIX GCLOUD_FAIL_NEXT
 teardown_tmp_workspace
 
 start_test "no preemption artifacts in runtime script"
@@ -98,6 +178,56 @@ assert_contains \
   "gcloud storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz gs://tb/results/case_0001/fixed/of-x/task_0/result.tar.gz" \
   "$(cat "${GCLOUD_LOG}")" \
   "result tarball copied to result prefix"
+teardown_tmp_workspace
+
+start_test "checkpoint restore failure aborts before solver"
+setup_tmp_workspace
+SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
+CASE_DIR="${SCRATCH_ROOT_TEST}/case_0001/case"
+mkdir -p "${CASE_DIR}"
+printf '#!/usr/bin/env bash\ntouch solver-ran\nexit 0\n' > "${CASE_DIR}/command.sh"
+chmod +x "${CASE_DIR}/command.sh"
+
+GCLOUD_LS_HITS="gs://tb/checkpoints/case_0001/fixed/latest/" \
+GCLOUD_FAIL_CHECKPOINT_RSYNC=1 \
+SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
+BUCKET=tb CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
+bash "${SCRIPT_UNDER_TEST}" >/dev/null 2>"${TMPDIR_TEST}/stderr"
+rc=$?
+
+if [[ "${rc}" -eq 0 ]]; then
+  printf '  FAIL [%s] expected restore failure to exit non-zero\n' "${TEST_NAME}" >&2
+  TEST_FAILURES=$((TEST_FAILURES+1))
+fi
+if [[ -f "${CASE_DIR}/solver-ran" ]]; then
+  printf '  FAIL [%s] solver ran after restore failure\n' "${TEST_NAME}" >&2
+  TEST_FAILURES=$((TEST_FAILURES+1))
+fi
+teardown_tmp_workspace
+
+start_test "solver nonzero exit records failure and keeps checkpoint"
+setup_tmp_workspace
+SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
+CASE_DIR="${SCRATCH_ROOT_TEST}/case_0001/case"
+mkdir -p "${CASE_DIR}" "${TMPDIR_TEST}/bin"
+printf '#!/usr/bin/env bash\necho solver-start\nexit 7\n' > "${CASE_DIR}/command.sh"
+chmod +x "${CASE_DIR}/command.sh"
+printf '#!/usr/bin/env bash\nexec "$@"\n' > "${TMPDIR_TEST}/bin/setsid"
+chmod +x "${TMPDIR_TEST}/bin/setsid"
+
+PATH="${TMPDIR_TEST}/bin:${PATH}" SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
+BUCKET=tb CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
+bash "${SCRIPT_UNDER_TEST}" >"${TMPDIR_TEST}/stdout" 2>&1
+rc=$?
+
+assert_eq "7" "${rc}" "runtime returns solver exit code"
+assert_eq "7" "$(cat "${SCRATCH_ROOT_TEST}/case_0001/stage/exit_code.txt")" "exit_code.txt records solver rc"
+assert_contains "solver-start" "$(cat "${TMPDIR_TEST}/stdout")" "solver output streamed to stdout"
+assert_contains "solver-start" "$(cat "${SCRATCH_ROOT_TEST}/case_0001/stage/solver.stdout.log")" "solver output written to log"
+gcloud_calls="$(cat "${GCLOUD_LOG}")"
+assert_contains "storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/_FAILED gs://tb/results/case_0001/fixed/of-x/task_0/_FAILED" "${gcloud_calls}" "_FAILED copied"
+assert_not_contains "_SUCCESS" "${gcloud_calls}" "_SUCCESS not copied"
+assert_not_contains "storage rm -r gs://tb/checkpoints/case_0001/fixed/latest/" "${gcloud_calls}" "checkpoint not deleted on failure"
 teardown_tmp_workspace
 
 exit "${TEST_FAILURES}"

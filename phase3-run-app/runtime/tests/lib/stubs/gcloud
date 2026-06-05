@@ -22,6 +22,10 @@ if [[ "${GCLOUD_FAIL_NEXT:-0}" == "1" ]]; then
   exit 1
 fi
 
+if [[ "${GCLOUD_FAIL_CHECKPOINT_RSYNC:-0}" == "1" && "${1:-} ${2:-}" == "storage rsync" && "${4:-}" == gs://*/checkpoints/* ]]; then
+  exit 1
+fi
+
 case "${1:-} ${2:-}" in
   "storage ls")
     target="${3:-}"
