@@ -97,3 +97,11 @@ def test_finalize_rejects_incomplete_case():
 
 def test_list_cases():
     assert client.get("/api/cases").status_code == 200
+
+
+def test_finalize_accepts_optional_name():
+    from backend.schemas import FinalizeReq
+    req = FinalizeReq(name="Wind Tunnel v3")
+    assert req.name == "Wind Tunnel v3"
+    # name is optional; omitting it is allowed
+    assert FinalizeReq().name is None
