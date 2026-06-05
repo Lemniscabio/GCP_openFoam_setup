@@ -1,17 +1,25 @@
 import base64
 import datetime
-import json
 
 from core.run_repo import RunRecord
 
 
 def _envelope(batch_job_id, state):
-    body = {
-        "name": f"projects/p/locations/us-central1/jobs/{batch_job_id}",
-        "status": {"state": state},
+    # Mirrors the REAL Batch notification: job identity + state live in message
+    # ATTRIBUTES (JobName/NewJobState), and `data` is NOT the Job JSON. The junk
+    # `data` here guards against the handler ever trying to json-parse it again.
+    return {
+        "message": {
+            "data": base64.b64encode(b"not-json-batch-does-not-put-the-job-here").decode(),
+            "attributes": {
+                "Type": "JOB_STATE_CHANGED",
+                "JobName": f"projects/p/locations/us-central1/jobs/{batch_job_id}",
+                "JobUID": f"uid-{batch_job_id}",
+                "NewJobState": state,
+                "Region": "us-central1",
+            },
+        }
     }
-    data = base64.b64encode(json.dumps(body).encode()).decode()
-    return {"message": {"data": data, "attributes": {"newJobState": state}}}
 
 
 def test_event_updates_run_state(internal_client, mem_runs):
