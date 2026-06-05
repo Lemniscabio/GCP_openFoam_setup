@@ -62,5 +62,5 @@ jobs:
             --region ${REGION} \
             --service-account ${BACKEND_SA} \
             --allow-unauthenticated \
-            --update-env-vars OF_OAUTH_CLIENT_ID=${{ vars.OAUTH_CLIENT_ID }},OF_ALLOWED_DOMAIN=${ALLOWED_DOMAIN},OF_IMAGE_URI=${RUNTIME_IMAGE} \
+            --update-env-vars "^;^OF_OAUTH_CLIENT_ID=${{ vars.OAUTH_CLIENT_ID }};OF_ALLOWED_DOMAIN=${ALLOWED_DOMAIN};OF_IMAGE_URI=${RUNTIME_IMAGE};OF_SEED_ADMINS=kartikey.attri@lemnisca.bio,gaurav.deshmukh@lemnisca.bio" \
             --project ${PROJECT_ID}
