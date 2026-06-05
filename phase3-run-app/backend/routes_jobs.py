@@ -4,12 +4,21 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.deps import builder, case_record_repo, run_repo, status_service, storage, submitter
+from backend.deps import (
+    batch_state_getter,
+    builder,
+    case_record_repo,
+    run_repo,
+    status_service,
+    storage,
+    submitter,
+)
 from backend.rbac import require_active, require_runner
 from backend.schemas import SubmitReq
 from core.config import Settings
 from core.machines import MachineCatalog
 from core.naming import build_job_name, canonical_case_id
+from core.reconcile import reconcile_non_terminal
 from core.run_repo import RunRecord
 from core.validation import validate_case
 
@@ -90,7 +99,13 @@ def submit(
 
 
 @router.get("/jobs")
-def list_runs(account=Depends(require_active), runs=Depends(run_repo)):
+def list_runs(
+    account=Depends(require_active),
+    runs=Depends(run_repo),
+    get_state=Depends(batch_state_getter),
+):
+    # Backstop deletions (Batch sends no Pub/Sub event on delete) + any missed events.
+    reconcile_non_terminal(runs, get_state, datetime.datetime.now(datetime.timezone.utc))
     return {"runs": [dataclasses.asdict(r) for r in runs.list_recent()]}
 
 

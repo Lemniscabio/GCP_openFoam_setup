@@ -56,6 +56,8 @@ app.dependency_overrides[deps.run_repo] = lambda: _runs
 # RBAC's current_account eagerly resolves user_repo; override it so tests never build
 # a real Firestore client (fails in CI: no ADC). Dev mode returns an active admin.
 app.dependency_overrides[deps.user_repo] = lambda: _users
+# list_runs reconcile needs a Batch state getter; fake reports RUNNING (no real client).
+app.dependency_overrides[deps.batch_state_getter] = lambda: (lambda jid: "RUNNING")
 client = TestClient(app)
 
 
@@ -172,6 +174,24 @@ def test_submit_writes_run_record(client, valid_case, mem_runs, mem_case_records
     assert rec.case_names == ["Wind Tunnel v3"]
     assert rec.machine_type == "c2d-highcpu-8"
     assert rec.state == "SUBMITTED"
+
+
+def test_reconcile_marks_deleted_run_cancelled(client, mem_runs):
+    import datetime as _dt
+    from backend import deps
+    from backend.main import app as _app
+    from core.run_repo import RunRecord
+    mem_runs.create(RunRecord(
+        batch_job_id="of-gone-1", job_name="gone", submitted_by="dev@lemnisca.bio",
+        submitted_at=_dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc), region="us-central1",
+        machine_type="c2d-highcpu-8", mpi_ranks=4, spot=False, case_ids=["case_0006"],
+        case_names=["c"], state="RUNNING",
+    ))
+    # simulate the job having been deleted in Batch (get_state -> None)
+    _app.dependency_overrides[deps.batch_state_getter] = lambda: (lambda jid: None)
+    r = client.get("/api/jobs")
+    assert r.status_code == 200
+    assert mem_runs.get("of-gone-1").state == "CANCELLED"
 
 
 def test_list_runs_reads_from_repo(client, mem_runs):

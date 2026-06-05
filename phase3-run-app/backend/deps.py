@@ -94,3 +94,22 @@ def run_repo() -> FirestoreRunRepository:
 
 def user_repo() -> FirestoreUserRepository:
     return FirestoreUserRepository(_firestore())
+
+
+def batch_state_getter():
+    """Return a callable get_state(batch_job_id) -> Batch state name, or None if the
+    job no longer exists (deleted). Used by list_runs to reconcile non-terminal runs."""
+    from google.api_core.exceptions import NotFound
+
+    client = batch_v1.BatchServiceClient()
+    s = settings()
+    parent = f"projects/{s.project_id}/locations/{s.region}"
+
+    def _get(batch_job_id: str):
+        try:
+            job = client.get_job(name=f"{parent}/jobs/{batch_job_id}")
+            return job.status.state.name
+        except NotFound:
+            return None
+
+    return _get
