@@ -62,3 +62,48 @@ class InMemoryUserRepository:
         rec.status = status
         rec.decided_by = decided_by
         rec.decided_at = now
+
+
+class FirestoreUserRepository:
+    COLLECTION = "of_users"
+
+    def __init__(self, client, collection: str = COLLECTION) -> None:
+        self._c = client
+        self._col = collection
+
+    def _doc(self, email: str):
+        return self._c.collection(self._col).document(email.lower())
+
+    def get(self, email):
+        snap = self._doc(email).get()
+        if not snap.exists:
+            return None
+        d = snap.to_dict()
+        return UserRecord(
+            email=d["email"], role=d.get("role"), status=d.get("status", "pending"),
+            requested_at=d.get("requested_at"), decided_by=d.get("decided_by"),
+            decided_at=d.get("decided_at"),
+        )
+
+    def upsert(self, record):
+        self._doc(record.email).set({
+            "email": record.email.lower(), "role": record.role, "status": record.status,
+            "requested_at": record.requested_at, "decided_by": record.decided_by,
+            "decided_at": record.decided_at,
+        }, merge=True)
+
+    def list_all(self):
+        out = []
+        for snap in self._c.collection(self._col).stream():
+            d = snap.to_dict()
+            out.append(UserRecord(
+                email=d["email"], role=d.get("role"), status=d.get("status", "pending"),
+                requested_at=d.get("requested_at"), decided_by=d.get("decided_by"),
+                decided_at=d.get("decided_at"),
+            ))
+        return sorted(out, key=lambda u: u.email)
+
+    def set_decision(self, email, role, status, decided_by, now):
+        self._doc(email).set({
+            "role": role, "status": status, "decided_by": decided_by, "decided_at": now,
+        }, merge=True)
