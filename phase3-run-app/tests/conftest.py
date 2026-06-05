@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from backend import deps
@@ -94,3 +95,30 @@ def client(mem_storage, mem_case_records, mem_runs, fake_submitter):
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous)
+
+
+@pytest.fixture
+def internal_client(mem_runs):
+    from backend.routes_internal import push_claims, router as internal_router
+
+    internal_app = FastAPI()
+    internal_app.include_router(internal_router)
+    internal_app.dependency_overrides[deps.run_repo] = lambda: mem_runs
+    internal_app.dependency_overrides[push_claims] = lambda: {"email": "of-pubsub-push@test"}
+    with TestClient(internal_app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def internal_client_no_auth(mem_runs):
+    from backend.routes_internal import push_claims, router as internal_router
+
+    def reject_push():
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    internal_app = FastAPI()
+    internal_app.include_router(internal_router)
+    internal_app.dependency_overrides[deps.run_repo] = lambda: mem_runs
+    internal_app.dependency_overrides[push_claims] = reject_push
+    with TestClient(internal_app) as test_client:
+        yield test_client
