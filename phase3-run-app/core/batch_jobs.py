@@ -3,10 +3,17 @@ from core.disks import build_disk_spec
 from core.config import local_ssd_count_for_machine_type
 
 class BatchJobBuilder:
-    def __init__(self, bucket: str, image_uri: str, job_service_account: str | None = None) -> None:
+    def __init__(self, bucket: str, image_uri: str, job_service_account: str | None = None,
+                 pubsub_topic: str | None = None) -> None:
         self._bucket = bucket
         self._image = image_uri
         self._job_sa = job_service_account
+        self._pubsub_topic = pubsub_topic
+
+    def _notifications(self) -> list[dict]:
+        if not self._pubsub_topic:
+            return []
+        return [{"pubsubTopic": self._pubsub_topic, "message": {"type": "JOB_STATE_CHANGED"}}]
 
     def _local_ssd_mount_script(self, local_ssd_count: int, mount_path: str) -> str:
         if local_ssd_count == 1:
@@ -125,6 +132,7 @@ chmod a+w "${{MOUNT_PATH}}"
             "allocationPolicy": alloc,
             "logsPolicy": {"destination": "CLOUD_LOGGING"},
             "labels": {"app": "openfoam"},
+            "notifications": self._notifications(),
         }
 
     def build_multi(self, *, case_ids: list[str], machine_type: str, cpu_milli: int,
@@ -160,6 +168,7 @@ chmod a+w "${{MOUNT_PATH}}"
             "allocationPolicy": alloc,
             "logsPolicy": {"destination": "CLOUD_LOGGING"},
             "labels": {"app": "openfoam"},
+            "notifications": self._notifications(),
         }
 
 from google.cloud import batch_v1  # type: ignore

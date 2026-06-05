@@ -105,3 +105,18 @@ def test_specs_parse_into_batch_job_proto():
                           cpu_milli=32000, memory_mib=65536, mpi_ranks=16, job_name="j")
     json_format.ParseDict(single, batch_v1.Job()._pb)   # raises ParseError on mismatch
     json_format.ParseDict(multi, batch_v1.Job()._pb)
+
+
+def test_job_spec_includes_pubsub_notifications():
+    from core.batch_jobs import BatchJobBuilder
+    b = BatchJobBuilder(
+        bucket="buck", image_uri="img:1",
+        pubsub_topic="projects/cfd-lemnisca/topics/of-batch-job-state",
+    )
+    spec = b.build_single(
+        case_id="case_0006", machine_type="c2d-highcpu-8",
+        cpu_milli=8000, memory_mib=16384, mpi_ranks=4, job_name="j",
+    )
+    notes = spec["notifications"]
+    assert notes[0]["pubsubTopic"] == "projects/cfd-lemnisca/topics/of-batch-job-state"
+    assert notes[0]["message"]["type"] == "JOB_STATE_CHANGED"
