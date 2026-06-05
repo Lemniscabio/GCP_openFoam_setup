@@ -1,8 +1,15 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # vCPU -> (cpu_milli, memory_mib). c2d-highcpu is 2GB/vCPU.
 _C2D_HIGHCPU_VCPUS = [2, 4, 8, 16, 32, 56, 112]
+
+
+def _parse_seed_admins() -> list[str]:
+    raw = os.environ.get(
+        "OF_SEED_ADMINS", "kartikey.attri@lemnisca.bio,gaurav.deshmukh@lemnisca.bio"
+    )
+    return [e.strip().lower() for e in raw.split(",") if e.strip()]
 
 
 def min_local_ssd_count(vcpus: int) -> int:
@@ -51,3 +58,4 @@ class Settings:
     pubsub_push_sa: str = os.environ.get(
         "OF_PUBSUB_PUSH_SA", "of-pubsub-push@cfd-lemnisca.iam.gserviceaccount.com"
     )
+    seed_admins: list[str] = field(default_factory=_parse_seed_admins)

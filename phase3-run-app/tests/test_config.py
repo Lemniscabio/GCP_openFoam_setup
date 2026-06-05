@@ -48,3 +48,10 @@ def test_settings_have_pubsub_and_firestore_defaults():
     assert s.pubsub_topic == "of-batch-job-state"
     assert s.firestore_database == "(default)"
     assert s.pubsub_push_sa.endswith("@cfd-lemnisca.iam.gserviceaccount.com")
+
+def test_seed_admins_parsed_from_env(monkeypatch):
+    monkeypatch.setenv("OF_SEED_ADMINS", "a@lemnisca.bio, b@lemnisca.bio")
+    from importlib import reload
+    import core.config as cfg
+    reload(cfg)
+    assert cfg.Settings().seed_admins == ["a@lemnisca.bio", "b@lemnisca.bio"]
