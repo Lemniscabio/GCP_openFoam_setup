@@ -1,6 +1,4 @@
-import base64
 import datetime
-import json
 
 from fastapi import APIRouter, Depends, Request, Response
 
@@ -32,17 +30,18 @@ async def batch_events(
     _claims=Depends(push_claims),
     runs=Depends(run_repo),
 ):
+    # Batch publishes job-state changes as Pub/Sub message ATTRIBUTES, NOT as JSON in
+    # `data` (the `data` body is not the Job resource). Documented attributes:
+    # Type, JobUID, JobName, NewJobState, Region. `JobName` is the full resource path
+    # projects/.../jobs/<batch_job_id>; our of_runs doc id is that trailing id.
     envelope = await request.json()
-    msg = envelope.get("message", {})
-    raw = base64.b64decode(msg.get("data", "")) if msg.get("data") else b"{}"
-    job = json.loads(raw or b"{}")
-    name = job.get("name", "")
-    batch_job_id = name.split("/")[-1] if name else msg.get("attributes", {}).get("JobUID", "")
-    state = (job.get("status", {}) or {}).get("state") or msg.get("attributes", {}).get(
-        "newJobState", ""
-    )
+    msg = envelope.get("message", {}) or {}
+    attrs = msg.get("attributes", {}) or {}
+    job_name = attrs.get("JobName", "")
+    batch_job_id = job_name.split("/")[-1] if job_name else attrs.get("JobUID", "")
+    state = attrs.get("NewJobState", "")
     if not batch_job_id or not state:
-        return Response(status_code=204)  # ack malformed messages; nothing to do
+        return Response(status_code=204)  # ack; nothing actionable in this message
     finished = datetime.datetime.now(datetime.timezone.utc) if state in TERMINAL_STATES else None
     runs.update_state(batch_job_id, state, finished_at=finished)
     return Response(status_code=204)
