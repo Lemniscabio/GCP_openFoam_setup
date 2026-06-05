@@ -29,8 +29,11 @@ export class ApiClient {
   allocate(cases: { files: string[] }[]) {
     return this.req("POST", "/api/cases:allocate", { cases });
   }
-  finalize(caseId: string) {
-    return this.req("POST", `/api/cases/${caseId}:finalize`, { openfoam_version: "12" });
+  finalize(caseId: string, body: { name?: string; openfoam_version?: string } = {}) {
+    return this.req("POST", `/api/cases/${caseId}:finalize`, {
+      openfoam_version: body.openfoam_version ?? "12",
+      ...(body.name !== undefined ? { name: body.name } : {}),
+    });
   }
   listCases(): Promise<{ cases: CaseInfo[] }> {
     return this.req("GET", "/api/cases");

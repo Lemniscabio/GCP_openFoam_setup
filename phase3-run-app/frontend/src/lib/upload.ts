@@ -1,4 +1,10 @@
 // Bounded-concurrency task pool with per-task retry, for parallel browser->GCS uploads.
+export type FinalizeCaseBody = { name?: string; openfoam_version?: string };
+
+export function finalizeBodyForCase(name: string): FinalizeCaseBody {
+  return { name, openfoam_version: "12" };
+}
+
 export async function runPool<T>(
   tasks: Array<() => Promise<T>>,
   concurrency = 10,
