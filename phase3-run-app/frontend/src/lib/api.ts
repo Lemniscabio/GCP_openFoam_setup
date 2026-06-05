@@ -24,7 +24,16 @@ export class ApiClient {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}`);
+    if (!r.ok) {
+      let detail = "";
+      try {
+        const payload = await r.json();
+        detail = typeof payload?.detail === "string" ? `: ${payload.detail}` : "";
+      } catch {
+        detail = "";
+      }
+      throw new Error(`${method} ${path} -> ${r.status}${detail}`);
+    }
     return r.status === 204 ? null : r.json();
   }
 

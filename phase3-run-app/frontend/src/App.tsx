@@ -5,6 +5,7 @@ import { tokenStore } from "./lib/auth";
 import { api, type Me } from "./lib/client";
 import { usePanelVariants } from "./lib/motion";
 import { UploadView } from "./views/UploadView";
+import { AdminView } from "./views/AdminView";
 import { CasesView } from "./views/CasesView";
 import { RunView } from "./views/RunView";
 import { RunsView } from "./views/RunsView";
@@ -33,8 +34,12 @@ export default function App() {
   const canRun = me?.role !== "viewer";
 
   useEffect(() => {
-    if (!me || canRun) return;
-    if (tab === "upload" || tab === "run") setTab("cases");
+    if (!me) return;
+    if (!canRun && (tab === "upload" || tab === "run")) {
+      setTab("cases");
+      return;
+    }
+    if (tab === "admin" && me.role !== "admin") setTab("cases");
   }, [canRun, me, tab]);
 
   if (accessError) {
@@ -79,6 +84,7 @@ export default function App() {
             <RunView caseIds={selected} canSubmit={canRun} onSubmitted={() => setTab("runs")} />
           )}
           {tab === "runs" && <RunsView />}
+          {tab === "admin" && me.role === "admin" && <AdminView />}
         </motion.div>
       </AnimatePresence>
     </AppShell>
