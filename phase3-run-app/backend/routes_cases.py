@@ -3,8 +3,8 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.auth import User, current_user
 from backend.deps import case_record_repo, case_repo, storage, url_service
+from backend.rbac import require_active, require_runner
 from backend.schemas import AllocateReq, FinalizeReq
 from core.case_records import CaseRecord
 
@@ -14,10 +14,11 @@ router = APIRouter()
 @router.post("/cases:allocate")
 def allocate(
     req: AllocateReq,
-    user: User = Depends(current_user),
+    account=Depends(require_runner),
     repo=Depends(case_repo),
     urls=Depends(url_service),
 ):
+    user = account[0]
     ids = repo.allocate_ids(len(req.cases))
     now = datetime.datetime.now(datetime.timezone.utc)
     cases = []
@@ -43,11 +44,12 @@ def allocate(
 def finalize(
     case_id: str,
     req: FinalizeReq,
-    user: User = Depends(current_user),
+    account=Depends(require_runner),
     repo=Depends(case_repo),
     records=Depends(case_record_repo),
     store=Depends(storage),
 ):
+    user = account[0]
     if not repo.exists(case_id):
         raise HTTPException(status_code=404, detail="unknown case")
     if not store.list_paths(f"cases/{case_id}/case/"):
@@ -79,5 +81,5 @@ def finalize(
 
 
 @router.get("/cases")
-def list_cases(user: User = Depends(current_user), repo=Depends(case_repo)):
+def list_cases(account=Depends(require_active), repo=Depends(case_repo)):
     return {"cases": [{"case_id": c.case_id, "ready": c.ready} for c in repo.list_cases()]}

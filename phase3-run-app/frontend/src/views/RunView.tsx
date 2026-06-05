@@ -5,7 +5,15 @@ import { usePanelVariants } from "@/lib/motion";
 import { api } from "../lib/client";
 import { MACHINES } from "../lib/machines";
 
-export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitted: () => void }) {
+export function RunView({
+  caseIds,
+  canSubmit = true,
+  onSubmitted,
+}: {
+  caseIds: string[];
+  canSubmit?: boolean;
+  onSubmitted: () => void;
+}) {
   const [machine, setMachine] = useState("c2d-highcpu-56");
   const [spot, setSpot] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -15,7 +23,7 @@ export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitt
   const mode = caseIds.length > 1 ? "multi-task" : "single";
 
   async function submit() {
-    if (caseIds.length === 0 || busy) return;
+    if (!canSubmit || caseIds.length === 0 || busy) return;
     setBusy(true);
     setMsg(null);
     try {
@@ -93,7 +101,9 @@ export function RunView({ caseIds, onSubmitted }: { caseIds: string[]; onSubmitt
             </div>
           </div>
           <div className="row-end">
-            <Button disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Run job"}</Button>
+            <Button disabled={!canSubmit || busy} onClick={submit}>
+              {!canSubmit ? "Read-only" : busy ? "Submitting…" : "Run job"}
+            </Button>
           </div>
           {msg && <div className="empty-state" style={{ fontStyle: "normal" }}>{msg}</div>}
         </div>

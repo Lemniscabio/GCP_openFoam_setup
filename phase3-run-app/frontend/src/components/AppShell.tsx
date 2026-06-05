@@ -1,26 +1,37 @@
 import { type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
 
 import { usePanelVariants } from "@/lib/motion";
+import type { Me } from "@/lib/client";
 
-export type Tab = "upload" | "cases" | "run" | "runs";
+export type Tab = "upload" | "cases" | "run" | "runs" | "admin";
 const TABS: { id: Tab; n: string; label: string }[] = [
   { id: "upload", n: "01", label: "Upload" },
   { id: "cases", n: "02", label: "Cases" },
   { id: "run", n: "03", label: "Run" },
   { id: "runs", n: "04", label: "Runs" },
+  { id: "admin", n: "05", label: "Admin" },
 ];
 
 export function AppShell({
   tab,
   onTab,
+  me,
+  canRun = true,
   children,
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
+  me: Me;
+  canRun?: boolean;
   children: ReactNode;
 }) {
   const panelVariants = usePanelVariants();
+  const tabs = TABS.filter((t) => {
+    if (t.id === "admin") return me.role === "admin";
+    return canRun || (t.id !== "upload" && t.id !== "run");
+  });
 
   return (
     <>
@@ -39,7 +50,7 @@ export function AppShell({
             </div>
           </div>
           <div className="tabs">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t.id}
                 className={`tab${tab === t.id ? " on" : ""}`}
@@ -52,8 +63,8 @@ export function AppShell({
           </div>
           <div className="header-spacer" />
           <div className="header-meta">
-            <div className="dot" />
-            <span style={{ fontFamily: "var(--f-mono)" }}>cfd-lemnisca-cases</span>
+            <span style={{ fontFamily: "var(--f-mono)" }}>{me.email}</span>
+            <Badge variant="secondary">{me.role ?? "pending"}</Badge>
           </div>
         </div>
         <div className="stage">{children}</div>

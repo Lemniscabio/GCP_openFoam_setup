@@ -4,12 +4,14 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from backend import deps
-from backend.main import app
+import backend.main as backend_main
+from backend import deps, rbac
+from backend.auth import User
 from core.case_records import CaseRecord, InMemoryCaseRecordRepository
 from core.cases import CaseRepository
 from core.run_repo import InMemoryRunRepository
 from core.storage import InMemoryStorage
+from core.users import InMemoryUserRepository, UserRecord
 
 
 class _TestCaseRecordRepository(InMemoryCaseRecordRepository):
@@ -63,6 +65,11 @@ def mem_runs():
 
 
 @pytest.fixture
+def mem_users():
+    return InMemoryUserRepository()
+
+
+@pytest.fixture
 def fake_submitter():
     return _FakeSubmitter()
 
@@ -81,20 +88,31 @@ def valid_case(mem_storage):
 
 
 @pytest.fixture
-def client(mem_storage, mem_case_records, mem_runs, fake_submitter):
-    previous = app.dependency_overrides.copy()
-    app.dependency_overrides[deps.storage] = lambda: mem_storage
-    app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(mem_storage)
-    app.dependency_overrides[deps.case_record_repo] = lambda: mem_case_records
-    app.dependency_overrides[deps.run_repo] = lambda: mem_runs
-    app.dependency_overrides[deps.submitter] = lambda: fake_submitter
-    app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
+def client(mem_storage, mem_case_records, mem_runs, mem_users, fake_submitter):
+    test_app = backend_main.app
+    previous = test_app.dependency_overrides.copy()
+    test_app.dependency_overrides[deps.storage] = lambda: mem_storage
+    test_app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(mem_storage)
+    test_app.dependency_overrides[deps.case_record_repo] = lambda: mem_case_records
+    test_app.dependency_overrides[deps.run_repo] = lambda: mem_runs
+    test_app.dependency_overrides[deps.user_repo] = lambda: mem_users
+    test_app.dependency_overrides[deps.submitter] = lambda: fake_submitter
+    test_app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
+    test_app.dependency_overrides[rbac.current_account] = lambda: (
+        User(email="dev@lemnisca.bio", sub="d"),
+        UserRecord(
+            email="dev@lemnisca.bio",
+            role="admin",
+            status="active",
+            requested_at=datetime.datetime.now(datetime.timezone.utc),
+        ),
+    )
     try:
-        with TestClient(app) as test_client:
+        with TestClient(test_app) as test_client:
             yield test_client
     finally:
-        app.dependency_overrides.clear()
-        app.dependency_overrides.update(previous)
+        test_app.dependency_overrides.clear()
+        test_app.dependency_overrides.update(previous)
 
 
 @pytest.fixture

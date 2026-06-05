@@ -1,6 +1,8 @@
 // Typed API client. Attaches the Google ID token as a Bearer header.
 export type CaseInfo = { case_id: string; ready: boolean };
 export type RunSummary = { job_name: string; state: string; progress_pct: number | null };
+export type Me = { email: string; role: string | null; status: string };
+export type ManagedUser = { email: string; role: string | null; status: string; decided_by: string | null };
 
 export class ApiClient {
   private base: string;
@@ -22,7 +24,16 @@ export class ApiClient {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}`);
+    if (!r.ok) {
+      let detail = "";
+      try {
+        const payload = await r.json();
+        detail = typeof payload?.detail === "string" ? `: ${payload.detail}` : "";
+      } catch {
+        detail = "";
+      }
+      throw new Error(`${method} ${path} -> ${r.status}${detail}`);
+    }
     return r.status === 204 ? null : r.json();
   }
 
@@ -46,5 +57,14 @@ export class ApiClient {
   }
   runDetail(job: string, caseId: string, variant: string) {
     return this.req("GET", `/api/jobs/${job}?case_id=${caseId}&variant=${variant}`);
+  }
+  getMe(): Promise<Me> {
+    return this.req("GET", "/api/me");
+  }
+  listUsers(): Promise<{ users: ManagedUser[] }> {
+    return this.req("GET", "/api/admin/users");
+  }
+  setUser(email: string, body: { role?: string; status?: string }): Promise<ManagedUser> {
+    return this.req("POST", `/api/admin/users/${encodeURIComponent(email)}`, body);
   }
 }

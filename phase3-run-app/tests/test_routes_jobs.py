@@ -186,3 +186,19 @@ def test_list_runs_reads_from_repo(client, mem_runs):
     assert runs[0]["batch_job_id"] == "of-x-1"
     assert runs[0]["case_names"] == ["Wind Tunnel v3"]
     assert runs[0]["state"] == "RUNNING"
+
+
+def test_viewer_cannot_submit(client, valid_case):
+    import datetime
+    from backend import rbac
+    from backend.auth import User
+    from backend.main import app
+    from core.users import UserRecord
+    now = datetime.datetime.now(datetime.timezone.utc)
+    app.dependency_overrides[rbac.current_account] = lambda: (
+        User(email="v@lemnisca.bio", sub="v"),
+        UserRecord(email="v@lemnisca.bio", role="viewer", status="active", requested_at=now),
+    )
+    r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
+    assert r.status_code == 403
+    app.dependency_overrides.pop(rbac.current_account, None)

@@ -25,4 +25,20 @@ describe("ApiClient", () => {
     const api = new ApiClient("", () => null, fetchMock as unknown as typeof fetch);
     await expect(api.listCases()).rejects.toThrow();
   });
+
+  it("getMe GETs /api/me and setUser POSTs the role/status", async () => {
+    const calls: { url: string; method?: string; body?: BodyInit | null }[] = [];
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), method: init?.method, body: init?.body });
+      return new Response(JSON.stringify({ email: "x@lemnisca.bio", role: "viewer", status: "active" }), { status: 200 });
+    });
+    const api = new ApiClient("", () => "tok", fetchMock as unknown as typeof fetch);
+    await api.getMe();
+    await api.setUser("x@lemnisca.bio", { role: "runner", status: "active" });
+    const me = calls.find((c) => c.url.includes("/api/me"));
+    const set = calls.find((c) => c.url.includes("/api/admin/users/"));
+    expect(me?.method).toBe("GET");
+    expect(set?.method).toBe("POST");
+    expect(JSON.parse(String(set?.body))).toEqual({ role: "runner", status: "active" });
+  });
 });
