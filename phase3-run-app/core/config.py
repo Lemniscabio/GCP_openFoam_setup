@@ -46,3 +46,8 @@ class Settings:
     oauth_client_id: str = os.environ.get("OF_OAUTH_CLIENT_ID", "")
     allowed_domain: str = os.environ.get("OF_ALLOWED_DOMAIN", "lemnisca.bio")
     scratch_root: str = "/mnt/disks/openfoam-scratch"
+    firestore_database: str = os.environ.get("OF_FIRESTORE_DB", "(default)")
+    pubsub_topic: str = os.environ.get("OF_PUBSUB_TOPIC", "of-batch-job-state")
+    pubsub_push_sa: str = os.environ.get(
+        "OF_PUBSUB_PUSH_SA", "of-pubsub-push@cfd-lemnisca.iam.gserviceaccount.com"
+    )

@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { ApiClient } from "../lib/api";
 import { runPool } from "../lib/upload";
 
 describe("runPool", () => {
@@ -33,5 +34,17 @@ describe("runPool", () => {
       throw new Error("always");
     };
     await expect(runPool([t], 1, 2)).rejects.toThrow("always");
+  });
+
+  it("sends the case name on finalize", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ case_id: "case_0006", ready: true }), { status: 200 }),
+    );
+    const api = new ApiClient("", () => null, fetchMock as unknown as typeof fetch);
+
+    await api.finalize("case_0006", { name: "Wind Tunnel v3", openfoam_version: "12" });
+
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(JSON.parse(init.body as string).name).toBe("Wind Tunnel v3");
   });
 });

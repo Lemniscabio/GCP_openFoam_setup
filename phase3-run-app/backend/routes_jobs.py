@@ -1,12 +1,16 @@
+import dataclasses
 import datetime
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth import User, current_user
-from backend.deps import builder, status_service, storage, submitter
+from backend.deps import builder, case_record_repo, run_repo, status_service, storage, submitter
 from backend.schemas import SubmitReq
+from core.config import Settings
 from core.machines import MachineCatalog
 from core.naming import build_job_name, canonical_case_id
+from core.run_repo import RunRecord
 from core.validation import validate_case
 
 router = APIRouter()
@@ -18,6 +22,8 @@ def submit(
     user: User = Depends(current_user),
     b=Depends(builder),
     store=Depends(storage),
+    records=Depends(case_record_repo),
+    runs=Depends(run_repo),
     sub=Depends(submitter),
 ):
     try:
@@ -62,12 +68,29 @@ def submit(
         )
 
     name = sub.submit(job_name, spec)
-    return {"job_name": job_name, "name": name, "submitted_by": user.email}
+    try:
+        runs.create(
+            RunRecord(
+                batch_job_id=job_name,
+                job_name=job_name,
+                submitted_by=user.email,
+                submitted_at=datetime.datetime.now(datetime.timezone.utc),
+                region=Settings().region,
+                machine_type=req.machine_type,
+                mpi_ranks=machine["default_mpi_ranks"],
+                spot=req.spot,
+                case_ids=case_ids,
+                case_names=records.names_for(case_ids),
+            )
+        )
+    except Exception:
+        logging.exception("failed to persist of_runs record for %s", job_name)
+    return {"job_name": job_name, "batch_job_id": job_name, "name": name, "submitted_by": user.email}
 
 
 @router.get("/jobs")
-def list_runs(user: User = Depends(current_user), st=Depends(status_service)):
-    return {"runs": [r.__dict__ for r in st.list_runs()]}
+def list_runs(user: User = Depends(current_user), runs=Depends(run_repo)):
+    return {"runs": [dataclasses.asdict(r) for r in runs.list_recent()]}
 
 
 @router.get("/jobs/{job_name}")

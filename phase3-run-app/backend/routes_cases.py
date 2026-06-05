@@ -4,8 +4,9 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth import User, current_user
-from backend.deps import case_repo, storage, url_service
+from backend.deps import case_record_repo, case_repo, storage, url_service
 from backend.schemas import AllocateReq, FinalizeReq
+from core.case_records import CaseRecord
 
 router = APIRouter()
 
@@ -44,6 +45,7 @@ def finalize(
     req: FinalizeReq,
     user: User = Depends(current_user),
     repo=Depends(case_repo),
+    records=Depends(case_record_repo),
     store=Depends(storage),
 ):
     if not repo.exists(case_id):
@@ -53,7 +55,8 @@ def finalize(
     if not store.object_exists(f"cases/{case_id}/case/command.sh"):
         raise HTTPException(status_code=400, detail="case incomplete: missing case/command.sh")
 
-    uploaded_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    uploaded_at = now.isoformat()
     manifest = {
         "case_id": case_id,
         "solver_family": "openfoam",
@@ -63,6 +66,15 @@ def finalize(
     }
     store.upload_bytes(f"cases/{case_id}/manifest.json", json.dumps(manifest).encode())
     store.upload_bytes(f"cases/{case_id}/READY", uploaded_at.encode())
+    records.upsert(
+        CaseRecord(
+            case_id=case_id,
+            name=(req.name or case_id),
+            uploaded_by=user.email,
+            uploaded_at=now,
+            ready=True,
+        )
+    )
     return {"case_id": case_id, "ready": True}
 
 

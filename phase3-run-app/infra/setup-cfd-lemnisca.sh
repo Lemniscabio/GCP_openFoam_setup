@@ -16,6 +16,7 @@ REGION="us-central1"
 BUCKET="cfd-lemnisca-cases"          # of-cases is globally taken by the old project
 GH_REPO="Lemniscabio/GCP_openFoam_setup"
 IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/openfoam/openfoam:12.0.0"
+SERVICE="of-batch-app"
 BACKEND_SA="of-batch-backend@${PROJECT_ID}.iam.gserviceaccount.com"
 JOB_SA="of-batch-job@${PROJECT_ID}.iam.gserviceaccount.com"
 CI_SA="of-ci-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -37,6 +38,7 @@ gcloud services enable \
   storage.googleapis.com batch.googleapis.com compute.googleapis.com \
   artifactregistry.googleapis.com cloudbuild.googleapis.com \
   cloudresourcemanager.googleapis.com logging.googleapis.com \
+  firestore.googleapis.com pubsub.googleapis.com \
   --project="${PROJECT_ID}"
 
 say "2. Artifact Registry repo"
@@ -57,8 +59,17 @@ gcloud iam service-accounts create of-batch-backend \
   --display-name="OF Batch web backend (Cloud Run)" --project="${PROJECT_ID}" || echo "(exists)"
 gcloud iam service-accounts create of-batch-job \
   --display-name="OF Batch job VM identity" --project="${PROJECT_ID}" || echo "(exists)"
+gcloud iam service-accounts create of-pubsub-push \
+  --display-name="Pub/Sub push to backend" --project="${PROJECT_ID}" \
+  2>/dev/null || echo "(push SA exists)"
 
-say "5. IAM bindings (least privilege)"
+say "5. Firestore + Pub/Sub resources"
+gcloud firestore databases create --location="${REGION}" --type=firestore-native \
+  --project="${PROJECT_ID}" 2>/dev/null || echo "(firestore default db exists)"
+gcloud pubsub topics create of-batch-job-state --project="${PROJECT_ID}" \
+  2>/dev/null || echo "(topic exists)"
+
+say "6. IAM bindings (least privilege)"
 # backend signs POST policies as itself
 gcloud iam service-accounts add-iam-policy-binding "${BACKEND_SA}" \
   --member="serviceAccount:${BACKEND_SA}" \
@@ -77,8 +88,17 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 gcloud artifacts repositories add-iam-policy-binding openfoam --location="${REGION}" \
   --member="serviceAccount:${JOB_SA}" --role="roles/artifactregistry.reader" \
   --project="${PROJECT_ID}"
+# Firestore audit records and Batch job state events.
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${BACKEND_SA}" --role="roles/datastore.user"
+gcloud pubsub topics add-iam-policy-binding of-batch-job-state \
+  --member="serviceAccount:${JOB_SA}" --role="roles/pubsub.publisher" \
+  --project="${PROJECT_ID}"
+gcloud run services add-iam-policy-binding "${SERVICE}" \
+  --member="serviceAccount:of-pubsub-push@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
 
-say "6. Fresh bucket + lifecycle"
+say "7. Fresh bucket + lifecycle"
 gcloud storage buckets create "gs://${BUCKET}" \
   --location="${REGION}" --uniform-bucket-level-access --project="${PROJECT_ID}" || echo "(exists)"
 # bucket-scoped storage for both SAs
@@ -97,7 +117,17 @@ cat > /tmp/of-lifecycle.json <<'JSON'
 JSON
 gcloud storage buckets update "gs://${BUCKET}" --lifecycle-file=/tmp/of-lifecycle.json
 
-say "7. Workload Identity Federation (own pool — no shared github-pool here)"
+say "8. Pub/Sub push subscription"
+BACKEND_URL="$(gcloud run services describe "${SERVICE}" --region="${REGION}" \
+  --format='value(status.url)' --project="${PROJECT_ID}")"
+gcloud pubsub subscriptions create of-batch-job-state-push \
+  --topic=of-batch-job-state \
+  --push-endpoint="${BACKEND_URL}/internal/batch-events" \
+  --push-auth-service-account="of-pubsub-push@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --push-auth-token-audience="${BACKEND_URL}" \
+  --project="${PROJECT_ID}" 2>/dev/null || echo "(subscription exists)"
+
+say "9. Workload Identity Federation (own pool — no shared github-pool here)"
 gcloud iam workload-identity-pools create of-github-pool \
   --location=global --display-name="OF Batch GitHub Actions pool" \
   --project="${PROJECT_ID}" || echo "(exists)"

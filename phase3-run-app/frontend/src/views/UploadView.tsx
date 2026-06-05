@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useListItemVariants, usePanelVariants } from "@/lib/motion";
 import { api } from "../lib/client";
-import { runPool, putFile } from "../lib/upload";
+import { finalizeBodyForCase, runPool, putFile } from "../lib/upload";
 
-type CaseFiles = { name: string; files: { relPath: string; file: File }[] };
+type CaseFiles = { sourceName: string; name: string; files: { relPath: string; file: File }[] };
 
 // Group a webkitdirectory FileList into cases.
 // Paths look like "<root>/...". If "<root>/command.sh" exists -> single case (root).
@@ -20,7 +20,7 @@ function groupIntoCases(list: FileList): CaseFiles[] {
   const root = entries[0].parts[0];
   const isSingle = entries.some((e) => e.parts.length === 2 && e.parts[1] === "command.sh" && e.parts[0] === root);
   if (isSingle) {
-    return [{ name: root, files: entries.map((e) => ({ relPath: e.parts.slice(1).join("/"), file: e.file })) }];
+    return [{ sourceName: root, name: "", files: entries.map((e) => ({ relPath: e.parts.slice(1).join("/"), file: e.file })) }];
   }
   const byCase = new Map<string, { relPath: string; file: File }[]>();
   for (const e of entries) {
@@ -30,7 +30,7 @@ function groupIntoCases(list: FileList): CaseFiles[] {
     if (!byCase.has(caseName)) byCase.set(caseName, []);
     byCase.get(caseName)!.push({ relPath, file: e.file });
   }
-  return [...byCase.entries()].map(([name, files]) => ({ name, files }));
+  return [...byCase.entries()].map(([sourceName, files]) => ({ sourceName, name: "", files }));
 }
 
 export function UploadView() {
@@ -45,11 +45,15 @@ export function UploadView() {
 
   const say = (m: string) => setLog((l) => [...l, m]);
 
+  function setCaseName(index: number, name: string) {
+    setCases((current) => current.map((c, i) => (i === index ? { ...c, name } : c)));
+  }
+
   function onPicked(list: FileList | null) {
     if (!list) return;
     const grouped = groupIntoCases(list);
     setCases(grouped);
-    setLog([`Detected ${grouped.length} case(s): ${grouped.map((c) => `${c.name} (${c.files.length} files)`).join(", ")}`]);
+    setLog([`Detected ${grouped.length} case(s): ${grouped.map((c) => `${c.sourceName} (${c.files.length} files)`).join(", ")}`]);
     setProgress({ done: 0, total: grouped.reduce((n, c) => n + c.files.length, 0) });
   }
 
@@ -73,7 +77,7 @@ export function UploadView() {
           setProgress((p) => ({ ...p, done }));
         });
         await runPool(tasks, 10);
-        await api.finalize(cid);
+        await api.finalize(cid, finalizeBodyForCase(cases[i].name));
         say(`✓ ${cid} uploaded + finalized`);
       }
       say("All cases uploaded. Switch to Cases to run them.");
@@ -126,13 +130,20 @@ export function UploadView() {
               {cases.map((c, index) => (
                 <motion.div
                   className="stack-item"
-                  key={c.name}
+                  key={c.sourceName}
                   custom={index}
                   variants={listVariants}
                   initial="hidden"
                   animate="visible"
                 >
-                  <span className="stack-id">{c.name}</span>
+                  <span className="stack-id">{c.sourceName}</span>
+                  <input
+                    aria-label={`Case name for ${c.sourceName}`}
+                    className="input"
+                    placeholder="Case name"
+                    value={c.name}
+                    onChange={(e) => setCaseName(index, e.target.value)}
+                  />
                   <span className="stack-path">{c.files.length} files</span>
                 </motion.div>
               ))}

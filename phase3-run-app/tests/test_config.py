@@ -41,3 +41,10 @@ def test_machine_catalog_exposes_local_ssd_count():
         "c2d-highcpu-56": 4,
         "c2d-highcpu-112": 8,
     }
+
+def test_settings_have_pubsub_and_firestore_defaults():
+    from core.config import Settings
+    s = Settings()
+    assert s.pubsub_topic == "of-batch-job-state"
+    assert s.firestore_database == "(default)"
+    assert s.pubsub_push_sa.endswith("@cfd-lemnisca.iam.gserviceaccount.com")

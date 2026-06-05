@@ -7,10 +7,14 @@ from fastapi.testclient import TestClient
 
 from backend import deps
 from backend.main import app
+from core.case_records import InMemoryCaseRecordRepository
+from core.run_repo import InMemoryRunRepository
 from core.storage import InMemoryStorage
 
 
 _store = InMemoryStorage()
+_case_records = InMemoryCaseRecordRepository()
+_runs = InMemoryRunRepository()
 _submissions = []
 
 
@@ -45,6 +49,8 @@ class _FakeStatus:
 app.dependency_overrides[deps.submitter] = lambda: _FakeSubmitter()
 app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
 app.dependency_overrides[deps.storage] = lambda: _store
+app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
+app.dependency_overrides[deps.run_repo] = lambda: _runs
 client = TestClient(app)
 
 
@@ -53,6 +59,8 @@ def _override_deps():
     app.dependency_overrides[deps.submitter] = lambda: _FakeSubmitter()
     app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
     app.dependency_overrides[deps.storage] = lambda: _store
+    app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
+    app.dependency_overrides[deps.run_repo] = lambda: _runs
 
 
 def _seed_valid_case(case_id):
@@ -114,6 +122,24 @@ def test_unknown_machine_400():
 
 
 def test_list_runs():
+    import datetime
+    from core.run_repo import RunRecord
+
+    _runs.create(
+        RunRecord(
+            batch_job_id="of-x-running",
+            job_name="of-x-running",
+            submitted_by="dev@lemnisca.bio",
+            submitted_at=datetime.datetime(2100, 1, 1, tzinfo=datetime.timezone.utc),
+            region="us-central1",
+            machine_type="c2d-highcpu-2",
+            mpi_ranks=1,
+            spot=False,
+            case_ids=["case_0001"],
+            case_names=["case_0001"],
+            state="RUNNING",
+        )
+    )
     r = client.get("/api/jobs")
 
     assert r.status_code == 200
@@ -128,3 +154,35 @@ def test_run_detail():
 
     assert r.status_code == 200
     assert r.json()["checkpoint_latest_timestep"] == 5.4
+
+
+def test_submit_writes_run_record(client, valid_case, mem_runs, mem_case_records):
+    mem_case_records.upsert_name("case_0006", "Wind Tunnel v3")
+    r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
+    assert r.status_code == 200
+    batch_job_id = r.json()["batch_job_id"]
+    rec = mem_runs.get(batch_job_id)
+    assert rec is not None
+    assert rec.submitted_by.endswith("@lemnisca.bio")
+    assert rec.case_names == ["Wind Tunnel v3"]
+    assert rec.machine_type == "c2d-highcpu-8"
+    assert rec.state == "SUBMITTED"
+
+
+def test_list_runs_reads_from_repo(client, mem_runs):
+    import datetime
+    from core.run_repo import RunRecord
+    mem_runs.create(RunRecord(
+        batch_job_id="of-x-1", job_name="windtunnel",
+        submitted_by="kartikey.attri@lemnisca.bio",
+        submitted_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        region="us-central1", machine_type="c2d-highcpu-8", mpi_ranks=4,
+        spot=False, case_ids=["case_0006"], case_names=["Wind Tunnel v3"],
+        state="RUNNING",
+    ))
+    r = client.get("/api/jobs")
+    assert r.status_code == 200
+    runs = r.json()["runs"]
+    assert runs[0]["batch_job_id"] == "of-x-1"
+    assert runs[0]["case_names"] == ["Wind Tunnel v3"]
+    assert runs[0]["state"] == "RUNNING"

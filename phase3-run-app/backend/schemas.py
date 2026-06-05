@@ -11,6 +11,7 @@ class AllocateReq(BaseModel):
 
 class FinalizeReq(BaseModel):
     openfoam_version: str = "12"
+    name: str | None = None
 
 
 class SubmitReq(BaseModel):
