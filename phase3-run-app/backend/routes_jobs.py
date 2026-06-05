@@ -4,8 +4,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.auth import User, current_user
 from backend.deps import builder, case_record_repo, run_repo, status_service, storage, submitter
+from backend.rbac import require_active, require_runner
 from backend.schemas import SubmitReq
 from core.config import Settings
 from core.machines import MachineCatalog
@@ -19,13 +19,14 @@ router = APIRouter()
 @router.post("/jobs")
 def submit(
     req: SubmitReq,
-    user: User = Depends(current_user),
+    account=Depends(require_runner),
     b=Depends(builder),
     store=Depends(storage),
     records=Depends(case_record_repo),
     runs=Depends(run_repo),
     sub=Depends(submitter),
 ):
+    user = account[0]
     try:
         machine = MachineCatalog().get(req.machine_type)
     except KeyError:
@@ -89,7 +90,7 @@ def submit(
 
 
 @router.get("/jobs")
-def list_runs(user: User = Depends(current_user), runs=Depends(run_repo)):
+def list_runs(account=Depends(require_active), runs=Depends(run_repo)):
     return {"runs": [dataclasses.asdict(r) for r in runs.list_recent()]}
 
 
@@ -98,7 +99,7 @@ def run_detail(
     job_name: str,
     case_id: str,
     variant: str,
-    user: User = Depends(current_user),
+    account=Depends(require_active),
     st=Depends(status_service),
 ):
     return st.get_status(job_name, case_id, variant)
