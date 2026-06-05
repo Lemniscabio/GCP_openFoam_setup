@@ -13,6 +13,7 @@ from core.run_repo import FirestoreRunRepository
 from core.status import RunStatusService
 from core.storage import GcsStorage
 from core.uploads import SignedUrlService
+from core.users import FirestoreUserRepository
 
 
 @lru_cache
@@ -89,3 +90,7 @@ def case_record_repo() -> FirestoreCaseRecordRepository:
 
 def run_repo() -> FirestoreRunRepository:
     return FirestoreRunRepository(_firestore())
+
+
+def user_repo() -> FirestoreUserRepository:
+    return FirestoreUserRepository(_firestore())
