@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { useListItemVariants, usePanelVariants } from "@/lib/motion";
 import { api, type CaseInfo } from "../lib/client";
 
-export function CasesView({ onRun }: { onRun: (caseIds: string[]) => void }) {
+export function CasesView({
+  onRun,
+  canRun = true,
+}: {
+  onRun: (caseIds: string[]) => void;
+  canRun?: boolean;
+}) {
   const [cases, setCases] = useState<CaseInfo[]>([]);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
@@ -74,8 +80,8 @@ export function CasesView({ onRun }: { onRun: (caseIds: string[]) => void }) {
             ))}
           </div>
           <div className="row-end">
-            <Button disabled={sel.size === 0} onClick={() => onRun([...sel])}>
-              Run {sel.size || ""} selected →
+            <Button disabled={!canRun || sel.size === 0} onClick={() => onRun([...sel])}>
+              {canRun ? `Run ${sel.size || ""} selected →` : "Read-only"}
             </Button>
           </div>
         </div>
