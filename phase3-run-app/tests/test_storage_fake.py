@@ -17,3 +17,13 @@ def test_list_case_ids_from_prefixes():
     s.upload_bytes("cases/case_0003/case/system/controlDict", b"")
     s.upload_bytes("results/case_0002/x", b"")  # not a case prefix
     assert sorted(s.list_case_ids()) == ["case_0001", "case_0003"]
+
+def test_list_paths_returns_matching_prefixes():
+    s = InMemoryStorage()
+    s.upload_bytes("cases/case_0001/READY", b"")
+    s.upload_bytes("cases/case_0001/case/command.sh", b"")
+    s.upload_bytes("cases/case_0002/READY", b"")
+    assert s.list_paths("cases/case_0001/") == [
+        "cases/case_0001/READY",
+        "cases/case_0001/case/command.sh",
+    ]

@@ -35,7 +35,4 @@ def validate_case(storage: StorageClient, case_id: str) -> ValidationResult:
     return ValidationResult(ok=(len(errors) == 0), errors=errors, warnings=warnings)
 
 def _all_paths(storage: StorageClient) -> list[str]:
-    # InMemoryStorage exposes _objs; GcsStorage implements list_paths(prefix)
-    if hasattr(storage, "_objs"):
-        return list(storage._objs.keys())  # type: ignore[attr-defined]
-    return storage.list_paths("cases/")  # type: ignore[attr-defined]
+    return storage.list_paths("cases/")

@@ -3,10 +3,11 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth import User, current_user
-from backend.deps import builder, status_service, submitter
+from backend.deps import builder, status_service, storage, submitter
 from backend.schemas import SubmitReq
 from core.machines import MachineCatalog
 from core.naming import build_job_name, canonical_case_id
+from core.validation import validate_case
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ def submit(
     req: SubmitReq,
     user: User = Depends(current_user),
     b=Depends(builder),
+    store=Depends(storage),
     sub=Depends(submitter),
 ):
     try:
@@ -24,6 +26,14 @@ def submit(
         raise HTTPException(status_code=400, detail=f"unknown machine {req.machine_type}")
 
     case_ids = [canonical_case_id(case_id) for case_id in req.case_ids]
+    errors = {}
+    for case_id in case_ids:
+        result = validate_case(store, case_id)
+        if not result.ok:
+            errors[case_id] = result.errors
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors})
+
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
     provisioning_model = "SPOT" if req.spot else "STANDARD"
     common = {

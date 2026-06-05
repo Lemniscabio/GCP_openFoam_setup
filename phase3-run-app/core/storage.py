@@ -2,6 +2,7 @@ from typing import Protocol
 
 class StorageClient(Protocol):
     def object_exists(self, path: str) -> bool: ...
+    def list_paths(self, prefix: str) -> list[str]: ...
     def create_exclusive(self, path: str, data: bytes) -> bool:
         """Create object only if it does not exist. True if created, False if it already existed."""
         ...
@@ -30,6 +31,9 @@ class InMemoryStorage:
 
     def read_text(self, path: str) -> str:
         return self._objs[path].decode("utf-8")
+
+    def list_paths(self, prefix: str) -> list[str]:
+        return sorted(path for path in self._objs if path.startswith(prefix))
 
     def list_case_ids(self) -> list[str]:
         ids = set()

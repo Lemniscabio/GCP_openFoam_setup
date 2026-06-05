@@ -1,7 +1,7 @@
 import datetime
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth import User, current_user
 from backend.deps import case_repo, storage, url_service
@@ -43,8 +43,16 @@ def finalize(
     case_id: str,
     req: FinalizeReq,
     user: User = Depends(current_user),
+    repo=Depends(case_repo),
     store=Depends(storage),
 ):
+    if not repo.exists(case_id):
+        raise HTTPException(status_code=404, detail="unknown case")
+    if not store.list_paths(f"cases/{case_id}/case/"):
+        raise HTTPException(status_code=400, detail="case incomplete: missing case/ tree")
+    if not store.object_exists(f"cases/{case_id}/case/command.sh"):
+        raise HTTPException(status_code=400, detail="case incomplete: missing case/command.sh")
+
     uploaded_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     manifest = {
         "case_id": case_id,

@@ -49,8 +49,8 @@ gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 say "3. Build (linux/amd64!) + push runtime image  [takes a few minutes]"
 # MUST be amd64 — Mac default arm64 fails Batch image pull.
 docker buildx build --platform linux/amd64 \
-  -f "${REPO_ROOT}/openfoam-batch/Dockerfile" \
-  -t "${IMAGE}" --push "${REPO_ROOT}/openfoam-batch"
+  -f "${REPO_ROOT}/phase3-run-app/runtime/Dockerfile" \
+  -t "${IMAGE}" --push "${REPO_ROOT}/phase3-run-app/runtime"
 
 say "4. Service accounts"
 gcloud iam service-accounts create of-batch-backend \

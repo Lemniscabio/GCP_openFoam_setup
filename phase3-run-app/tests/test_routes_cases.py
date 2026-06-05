@@ -2,6 +2,7 @@ import os
 
 os.environ["OF_DEV_NO_IAP"] = "1"
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend import deps
@@ -31,6 +32,18 @@ app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _override_deps():
+    app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(_store)
+    app.dependency_overrides[deps.storage] = lambda: _store
+    app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
+
+
+def _seed_uploaded_case(case_id):
+    _store.upload_bytes(f"cases/{case_id}/case/system/controlDict", b"x")
+    _store.upload_bytes(f"cases/{case_id}/case/command.sh", b"mpirun -np ${MPI_RANKS} foamRun -parallel")
+
+
 def test_allocate_returns_ids_and_urls():
     r = client.post(
         "/api/cases:allocate",
@@ -55,11 +68,31 @@ def test_finalize_writes_ready():
         "/api/cases:allocate",
         json={"cases": [{"files": ["0/U"]}]},
     ).json()["cases"][0]["case_id"]
+    _seed_uploaded_case(cid)
 
     r = client.post(f"/api/cases/{cid}:finalize", json={"openfoam_version": "12"})
 
     assert r.status_code == 200
     assert _store.object_exists(f"cases/{cid}/READY")
+
+
+def test_finalize_rejects_unknown_case():
+    r = client.post("/api/cases/case_999999:finalize", json={"openfoam_version": "12"})
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "unknown case"
+
+
+def test_finalize_rejects_incomplete_case():
+    cid = client.post(
+        "/api/cases:allocate",
+        json={"cases": [{"files": ["0/U"]}]},
+    ).json()["cases"][0]["case_id"]
+
+    r = client.post(f"/api/cases/{cid}:finalize", json={"openfoam_version": "12"})
+
+    assert r.status_code == 400
+    assert "case incomplete" in r.json()["detail"]
 
 
 def test_list_cases():
