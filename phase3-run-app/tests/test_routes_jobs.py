@@ -7,10 +7,14 @@ from fastapi.testclient import TestClient
 
 from backend import deps
 from backend.main import app
+from core.case_records import InMemoryCaseRecordRepository
+from core.run_repo import InMemoryRunRepository
 from core.storage import InMemoryStorage
 
 
 _store = InMemoryStorage()
+_case_records = InMemoryCaseRecordRepository()
+_runs = InMemoryRunRepository()
 _submissions = []
 
 
@@ -45,6 +49,8 @@ class _FakeStatus:
 app.dependency_overrides[deps.submitter] = lambda: _FakeSubmitter()
 app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
 app.dependency_overrides[deps.storage] = lambda: _store
+app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
+app.dependency_overrides[deps.run_repo] = lambda: _runs
 client = TestClient(app)
 
 
@@ -53,6 +59,8 @@ def _override_deps():
     app.dependency_overrides[deps.submitter] = lambda: _FakeSubmitter()
     app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
     app.dependency_overrides[deps.storage] = lambda: _store
+    app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
+    app.dependency_overrides[deps.run_repo] = lambda: _runs
 
 
 def _seed_valid_case(case_id):
@@ -128,3 +136,16 @@ def test_run_detail():
 
     assert r.status_code == 200
     assert r.json()["checkpoint_latest_timestep"] == 5.4
+
+
+def test_submit_writes_run_record(client, valid_case, mem_runs, mem_case_records):
+    mem_case_records.upsert_name("case_0006", "Wind Tunnel v3")
+    r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
+    assert r.status_code == 200
+    batch_job_id = r.json()["batch_job_id"]
+    rec = mem_runs.get(batch_job_id)
+    assert rec is not None
+    assert rec.submitted_by.endswith("@lemnisca.bio")
+    assert rec.case_names == ["Wind Tunnel v3"]
+    assert rec.machine_type == "c2d-highcpu-8"
+    assert rec.state == "SUBMITTED"

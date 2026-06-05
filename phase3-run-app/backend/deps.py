@@ -57,7 +57,13 @@ def url_service() -> SignedUrlService:
 
 def builder() -> BatchJobBuilder:
     s = settings()
-    return BatchJobBuilder(bucket=s.bucket, image_uri=s.image_uri, job_service_account=s.job_service_account)
+    topic = f"projects/{s.project_id}/topics/{s.pubsub_topic}"
+    return BatchJobBuilder(
+        bucket=s.bucket,
+        image_uri=s.image_uri,
+        job_service_account=s.job_service_account,
+        pubsub_topic=topic,
+    )
 
 
 def submitter() -> BatchSubmitter:
