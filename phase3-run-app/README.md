@@ -123,6 +123,8 @@ Checkpointing is always on. Every 30 s the runtime rsyncs solver state (`process
 
 No `maxRunDuration` — jobs run until done.
 
+> **Checkpointing only works for parallel (decomposed) runs.** It keys entirely off `processor*/` folders: the poll loop watches `processor0` to decide when to checkpoint, and only `processor*/` (plus `system/`) is uploaded. A **serial** case (run without `decomposePar`, so results live in `case/<time>/` instead of `processor*/<time>/`) is silently **not** checkpointed — the loop never fires, and an interrupted serial run resumes from time 0. All our cases run parallel via MPI, so this gap is latent, not active — but anything submitted as a single-process run would have no checkpoint protection.
+
 ---
 
 ## Local development
