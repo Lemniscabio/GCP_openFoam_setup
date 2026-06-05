@@ -10,12 +10,18 @@ from backend.main import app
 from core.case_records import InMemoryCaseRecordRepository
 from core.cases import CaseRepository
 from core.storage import InMemoryStorage
+from core.users import InMemoryUserRepository
 
 _store = InMemoryStorage()
 _case_records = InMemoryCaseRecordRepository()
+_users = InMemoryUserRepository()
 app.dependency_overrides[deps.case_repo] = lambda: CaseRepository(_store)
 app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
 app.dependency_overrides[deps.storage] = lambda: _store
+# RBAC's current_account eagerly resolves user_repo; without this override FastAPI
+# would build a real Firestore client (fails in CI: no ADC). Dev mode still returns
+# an active admin so the role gates pass.
+app.dependency_overrides[deps.user_repo] = lambda: _users
 
 
 class _FakeUrls:
@@ -41,6 +47,7 @@ def _override_deps():
     app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
     app.dependency_overrides[deps.storage] = lambda: _store
     app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
+    app.dependency_overrides[deps.user_repo] = lambda: _users
 
 
 def _seed_uploaded_case(case_id):

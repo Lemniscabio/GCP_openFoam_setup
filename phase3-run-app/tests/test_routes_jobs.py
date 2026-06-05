@@ -10,6 +10,7 @@ from backend.main import app
 from core.case_records import InMemoryCaseRecordRepository
 from core.run_repo import InMemoryRunRepository
 from core.storage import InMemoryStorage
+from core.users import InMemoryUserRepository
 
 
 _store = InMemoryStorage()
@@ -46,11 +47,15 @@ class _FakeStatus:
         }
 
 
+_users = InMemoryUserRepository()
 app.dependency_overrides[deps.submitter] = lambda: _FakeSubmitter()
 app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
 app.dependency_overrides[deps.storage] = lambda: _store
 app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
 app.dependency_overrides[deps.run_repo] = lambda: _runs
+# RBAC's current_account eagerly resolves user_repo; override it so tests never build
+# a real Firestore client (fails in CI: no ADC). Dev mode returns an active admin.
+app.dependency_overrides[deps.user_repo] = lambda: _users
 client = TestClient(app)
 
 
