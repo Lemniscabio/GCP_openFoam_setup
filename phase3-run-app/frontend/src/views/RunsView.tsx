@@ -52,7 +52,7 @@ export function RunsView() {
           <div className="ph-num">04</div>
           <div className="ph-text">
             <div className="ph-title">Runs</div>
-            <div className="ph-sub">live status · polled every 4s</div>
+            <div className="ph-sub">live status · auto-updated</div>
           </div>
         </div>
         <div className="panel-body">
