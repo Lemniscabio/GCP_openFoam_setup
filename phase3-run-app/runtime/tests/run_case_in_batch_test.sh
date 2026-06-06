@@ -7,7 +7,7 @@ SCRIPT_UNDER_TEST="${REPO_ROOT}/phase3-run-app/runtime/run_case_in_batch.sh"
 start_test "runtime aborts when SCRATCH_ROOT does not exist"
 setup_tmp_workspace
 SCRATCH_ROOT="${TMPDIR_TEST}/does-not-exist" \
-BUCKET=test-bucket CASE_ID=case_x VARIANT_ID=fixed JOB_NAME=of-x \
+BUCKET=test-bucket PROJECT=turbine CASE_ID=case_x VARIANT_ID=fixed JOB_NAME=of-x \
 bash "${SCRIPT_UNDER_TEST}" 2>"${TMPDIR_TEST}/stderr" >/dev/null
 rc=$?
 if [[ "${rc}" -eq 0 ]]; then
@@ -22,10 +22,10 @@ setup_tmp_workspace
 SCRATCH_ROOT_TEST="${TMPDIR_TEST}/scratch"
 mkdir -p "${SCRATCH_ROOT_TEST}"
 SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
-BUCKET=tb CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
+BUCKET=tb PROJECT=turbine CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
 bash "${SCRIPT_UNDER_TEST}" >/dev/null 2>&1
 assert_contains \
-  "gcloud storage rsync --recursive gs://tb/cases/case_0001/case/ ${SCRATCH_ROOT_TEST}/case_0001/case/" \
+  "gcloud storage rsync --recursive gs://tb/cases/turbine/case_0001/case/ ${SCRATCH_ROOT_TEST}/case_0001/case/" \
   "$(cat "${GCLOUD_LOG}")" \
   "case tree rsync recorded"
 teardown_tmp_workspace
@@ -147,7 +147,7 @@ awk '/^CASE_PREFIX=/ { print; print "echo CASE_ID_RESOLVED=$CASE_ID; exit 0"; ne
 
 unset CASE_ID
 probe_out="$(CASE_ID_LIST="case_0001,case_0002" BATCH_TASK_INDEX=1 \
-  BUCKET=tb VARIANT_ID=fixed JOB_NAME=of-x \
+  BUCKET=tb PROJECT=turbine VARIANT_ID=fixed JOB_NAME=of-x \
   SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
   bash "${TMPDIR_TEST}/probe.sh" 2>"${TMPDIR_TEST}/probe.err")"
 
@@ -165,7 +165,7 @@ printf '#!/usr/bin/env bash\nexec "$@"\n' > "${TMPDIR_TEST}/bin/setsid"
 chmod +x "${TMPDIR_TEST}/bin/setsid"
 
 PATH="${TMPDIR_TEST}/bin:${PATH}" SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
-BUCKET=tb CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
+BUCKET=tb PROJECT=turbine CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
 bash "${SCRIPT_UNDER_TEST}" >/dev/null 2>&1
 rc=$?
 
@@ -176,9 +176,15 @@ if [[ ! -f "${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz" ]]; then
 fi
 gcloud_calls="$(cat "${GCLOUD_LOG}")"
 assert_contains \
-  "gcloud storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz gs://tb/results/singlecase/of-x/case_0001/result.tar.gz" \
+  "gcloud storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz gs://tb/results/turbine/of-x/case_0001/result.tar.gz" \
   "${gcloud_calls}" \
-  "result tarball copied to single-case result prefix"
+  "result tarball copied to project result prefix"
+assert_contains \
+  "gcloud storage cp ${CASE_DIR}/metadata.json gs://tb/results/turbine/of-x/case_0001/metadata.json" \
+  "${gcloud_calls}" \
+  "metadata copied beside result tarball"
+assert_not_contains "/singlecase/" "${gcloud_calls}" "result path omits result mode"
+assert_not_contains "/multicase/" "${gcloud_calls}" "result path omits result mode"
 assert_not_contains "/task_" "${gcloud_calls}" "result path omits task segment"
 assert_not_contains "/results/case_0001/fixed/" "${gcloud_calls}" "result path omits variant segment"
 teardown_tmp_workspace
@@ -194,7 +200,7 @@ chmod +x "${CASE_DIR}/command.sh"
 GCLOUD_LS_HITS="gs://tb/checkpoints/case_0001/fixed/latest/" \
 GCLOUD_FAIL_CHECKPOINT_RSYNC=1 \
 SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
-BUCKET=tb CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
+BUCKET=tb PROJECT=turbine CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
 bash "${SCRIPT_UNDER_TEST}" >/dev/null 2>"${TMPDIR_TEST}/stderr"
 rc=$?
 
@@ -219,7 +225,7 @@ printf '#!/usr/bin/env bash\nexec "$@"\n' > "${TMPDIR_TEST}/bin/setsid"
 chmod +x "${TMPDIR_TEST}/bin/setsid"
 
 PATH="${TMPDIR_TEST}/bin:${PATH}" SCRATCH_ROOT="${SCRATCH_ROOT_TEST}" \
-BUCKET=tb CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
+BUCKET=tb PROJECT=turbine CASE_ID=case_0001 VARIANT_ID=fixed JOB_NAME=of-x \
 bash "${SCRIPT_UNDER_TEST}" >"${TMPDIR_TEST}/stdout" 2>&1
 rc=$?
 
@@ -228,7 +234,7 @@ assert_eq "7" "$(cat "${SCRATCH_ROOT_TEST}/case_0001/stage/exit_code.txt")" "exi
 assert_contains "solver-start" "$(cat "${TMPDIR_TEST}/stdout")" "solver output streamed to stdout"
 assert_contains "solver-start" "$(cat "${SCRATCH_ROOT_TEST}/case_0001/stage/solver.stdout.log")" "solver output written to log"
 gcloud_calls="$(cat "${GCLOUD_LOG}")"
-assert_contains "storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/_FAILED gs://tb/results/singlecase/of-x/case_0001/_FAILED" "${gcloud_calls}" "_FAILED copied"
+assert_contains "storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/_FAILED gs://tb/results/turbine/of-x/case_0001/_FAILED" "${gcloud_calls}" "_FAILED copied"
 assert_not_contains "_SUCCESS" "${gcloud_calls}" "_SUCCESS not copied"
 assert_not_contains "storage rm -r gs://tb/checkpoints/case_0001/fixed/latest/" "${gcloud_calls}" "checkpoint not deleted on failure"
 teardown_tmp_workspace
