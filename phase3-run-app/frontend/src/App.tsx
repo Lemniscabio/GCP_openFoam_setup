@@ -5,14 +5,17 @@ import { tokenStore } from "./lib/auth";
 import { api, type Me } from "./lib/client";
 import { usePanelVariants } from "./lib/motion";
 import { UploadView } from "./views/UploadView";
-import { AdminView } from "./views/AdminView";
 import { CasesView } from "./views/CasesView";
-import { RunView } from "./views/RunView";
+import { SubmitView } from "./views/SubmitView";
 import { RunsView } from "./views/RunsView";
+import { ResultsView } from "./views/ResultsView";
+import { ProfileView } from "./views/ProfileView";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [activeProject, setActiveProject] = useState<string | null>(null);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [view, setView] = useState<"section" | "profile">("section");
   const [me, setMe] = useState<Me | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const panelVariants = usePanelVariants();
@@ -33,15 +36,6 @@ export default function App() {
 
   const canRun = me?.role !== "viewer";
 
-  useEffect(() => {
-    if (!me) return;
-    if (!canRun && (tab === "upload" || tab === "run")) {
-      setTab("cases");
-      return;
-    }
-    if (tab === "admin" && me.role !== "admin") setTab("cases");
-  }, [canRun, me, tab]);
-
   if (accessError) {
     return <AccessState title="Unable to verify access" detail={accessError} />;
   }
@@ -59,32 +53,54 @@ export default function App() {
   }
 
   return (
-    <AppShell tab={tab} onTab={setTab} me={me} canRun={canRun}>
+    <AppShell
+      tab={tab}
+      onTab={(nextTab) => { setTab(nextTab); setView("section"); }}
+      onProfile={() => setView("profile")}
+      me={me}
+    >
       <AnimatePresence mode="wait">
         <motion.div
-          key={tab}
+          key={view === "profile" ? "profile" : tab}
           initial="hidden"
           animate="visible"
           exit="exit"
           variants={panelVariants}
           style={{ display: "contents" }}
         >
-          {tab === "upload" && <UploadView />}
+          {view === "profile" ? (
+            <ProfileView me={me} onBack={() => setView("section")} />
+          ) : (
+            <>
+          {tab === "upload" && (
+            <UploadView canUpload={canRun} onUploaded={(project, ids) => {
+              setActiveProject(project);
+              setSelectedCaseIds(ids);
+              setTab("cases");
+            }} />
+          )}
           {tab === "cases" && (
             <CasesView
+              activeProject={activeProject}
+              selectedCaseIds={selectedCaseIds}
               canRun={canRun}
-              onRun={(ids) => {
-                if (!canRun) return;
-                setSelected(ids);
-                setTab("run");
-              }}
+              onChange={setSelectedCaseIds}
+              onActiveProject={setActiveProject}
+              onSubmit={() => setTab("submit")}
             />
           )}
-          {tab === "run" && (
-            <RunView caseIds={selected} canSubmit={canRun} onSubmitted={() => setTab("runs")} />
+          {tab === "submit" && (
+            <SubmitView
+              project={activeProject}
+              caseIds={selectedCaseIds}
+              canSubmit={canRun}
+              onSubmitted={() => setTab("status")}
+            />
           )}
-          {tab === "runs" && <RunsView />}
-          {tab === "admin" && me.role === "admin" && <AdminView />}
+          {tab === "status" && <RunsView />}
+          {tab === "results" && <ResultsView />}
+            </>
+          )}
         </motion.div>
       </AnimatePresence>
     </AppShell>

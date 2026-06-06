@@ -1,6 +1,16 @@
 import { ApiClient } from "./api";
 import { tokenStore } from "./auth";
-export type { CaseInfo, ManagedUser, Me, RunSummary } from "./api";
+export type {
+  CaseInfo,
+  DownloadLink,
+  ManagedUser,
+  Me,
+  ProjectInfo,
+  ResultFile,
+  ResultRun,
+  RunRecord,
+  RunSummary,
+} from "./api";
 
 // Same-origin (FastAPI serves the SPA), token from the in-memory store.
 export const api = new ApiClient("", () => tokenStore.get());

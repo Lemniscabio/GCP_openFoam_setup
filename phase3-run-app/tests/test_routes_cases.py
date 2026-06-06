@@ -199,3 +199,23 @@ def test_list_projects(client, mem_projects):
     response = client.get("/api/projects")
     assert response.status_code == 200
     assert any(project["name"] == "turbine" for project in response.json()["projects"])
+
+
+def test_case_metadata_returns_parsed_json(client, mem_storage):
+    mem_storage.upload_bytes(
+        "cases/turbine/case_0006/case/metadata.json",
+        b'{"author":"k"}',
+    )
+    response = client.get("/api/cases/case_0006/metadata?project=turbine")
+    assert response.status_code == 200
+    assert response.json()["metadata"] == {"author": "k"}
+
+
+def test_case_metadata_404_when_absent(client):
+    response = client.get("/api/cases/case_0006/metadata?project=turbine")
+    assert response.status_code == 404
+
+
+def test_case_metadata_400_bad_project(client):
+    response = client.get("/api/cases/case_0006/metadata?project=bad/name")
+    assert response.status_code == 400

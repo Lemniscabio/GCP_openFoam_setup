@@ -98,6 +98,21 @@ def list_cases(account=Depends(require_active), records=Depends(case_record_repo
     return {"cases": [dataclasses.asdict(case) for case in records.list_all()]}
 
 
+@router.get("/cases/{case_id}/metadata")
+def case_metadata(
+    case_id: str,
+    project: str,
+    account=Depends(require_active),
+    store=Depends(storage),
+):
+    if not is_valid_project_name(project):
+        raise HTTPException(status_code=400, detail="invalid project")
+    path = f"cases/{project}/{case_id}/case/metadata.json"
+    if not store.object_exists(path):
+        raise HTTPException(status_code=404, detail="no metadata.json")
+    return {"metadata": json.loads(store.read_text(path))}
+
+
 @router.get("/projects")
 def list_projects(account=Depends(require_active), projects=Depends(project_repo)):
     return {"projects": [dataclasses.asdict(project) for project in projects.list_all()]}

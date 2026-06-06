@@ -1,5 +1,39 @@
 // Typed API client. Attaches the Google ID token as a Bearer header.
-export type CaseInfo = { case_id: string; ready: boolean };
+export type CaseInfo = {
+  case_id: string;
+  name: string;
+  project: string;
+  uploaded_by: string;
+  uploaded_at: string;
+  ready: boolean;
+};
+export type ProjectInfo = { name: string; created_by: string; created_at: string };
+export type ResultRun = {
+  codename: string;
+  project: string;
+  state: string;
+  case_ids: string[];
+  case_names: string[];
+  submitted_by: string;
+  submitted_at: string;
+};
+export type ResultFile = { name: string; size: number };
+export type DownloadLink = { object: string; url: string };
+export type RunRecord = {
+  batch_job_id: string;
+  job_name: string;
+  submitted_by: string;
+  submitted_at: string;
+  region: string;
+  machine_type: string;
+  mpi_ranks: number;
+  spot: boolean;
+  case_ids: string[];
+  case_names: string[];
+  state: string;
+  finished_at: string | null;
+  project: string;
+};
 export type RunSummary = { job_name: string; state: string; progress_pct: number | null };
 export type Me = { email: string; role: string | null; status: string };
 export type ManagedUser = { email: string; role: string | null; status: string; decided_by: string | null };
@@ -37,12 +71,13 @@ export class ApiClient {
     return r.status === 204 ? null : r.json();
   }
 
-  allocate(cases: { files: string[] }[]) {
-    return this.req("POST", "/api/cases:allocate", { cases });
+  allocate(project: string, cases: { files: string[] }[]) {
+    return this.req("POST", "/api/cases:allocate", { project, cases });
   }
-  finalize(caseId: string, body: { name?: string; openfoam_version?: string } = {}) {
+  finalize(caseId: string, body: { name?: string; openfoam_version?: string; project: string }) {
     return this.req("POST", `/api/cases/${caseId}:finalize`, {
       openfoam_version: body.openfoam_version ?? "12",
+      project: body.project,
       ...(body.name !== undefined ? { name: body.name } : {}),
     });
   }
@@ -63,6 +98,29 @@ export class ApiClient {
   }
   getMe(): Promise<Me> {
     return this.req("GET", "/api/me");
+  }
+  getProjects(): Promise<{ projects: ProjectInfo[] }> {
+    return this.req("GET", "/api/projects");
+  }
+  getResults(): Promise<{ results: ResultRun[] }> {
+    return this.req("GET", "/api/results");
+  }
+  getResultFiles(project: string, job: string, caseId: string): Promise<{ files: ResultFile[] }> {
+    const query = new URLSearchParams({ project, job, case: caseId });
+    return this.req("GET", `/api/results/files?${query}`);
+  }
+  postDownloads(objects: string[]): Promise<{ downloads: DownloadLink[]; missing: string[] }> {
+    return this.req("POST", "/api/results/downloads", { objects });
+  }
+  getMyRuns(): Promise<{ runs: RunRecord[] }> {
+    return this.req("GET", "/api/me/runs");
+  }
+  getAdminRuns(user?: string): Promise<{ runs: RunRecord[] }> {
+    return this.req("GET", `/api/admin/runs${user ? `?user=${encodeURIComponent(user)}` : ""}`);
+  }
+  getCaseMetadata(project: string, caseId: string): Promise<{ metadata: unknown }> {
+    const query = new URLSearchParams({ project });
+    return this.req("GET", `/api/cases/${caseId}/metadata?${query}`);
   }
   listUsers(): Promise<{ users: ManagedUser[] }> {
     return this.req("GET", "/api/admin/users");
