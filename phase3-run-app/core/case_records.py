@@ -16,6 +16,7 @@ class CaseRecord:
 class CaseRecordRepository(Protocol):
     def upsert(self, record: CaseRecord) -> None: ...
     def get(self, case_id: str) -> CaseRecord | None: ...
+    def list_all(self) -> list["CaseRecord"]: ...
     def names_for(self, case_ids: list[str]) -> list[str]:
         """Return the friendly name for each id, falling back to the id itself
         when no record exists."""
@@ -33,6 +34,9 @@ class InMemoryCaseRecordRepository:
 
     def get(self, case_id: str) -> CaseRecord | None:
         return self._cases.get(case_id)
+
+    def list_all(self) -> list[CaseRecord]:
+        return sorted(self._cases.values(), key=lambda case: case.case_id)
 
     def names_for(self, case_ids: list[str]) -> list[str]:
         out = []
@@ -78,6 +82,22 @@ class FirestoreCaseRecordRepository:
             uploaded_at=d.get("uploaded_at"), ready=d.get("ready", False),
             project=d.get("project", ""),
         )
+
+    def list_all(self) -> list[CaseRecord]:
+        out = []
+        for snap in self._c.collection(self._col).stream():
+            d = snap.to_dict()
+            out.append(
+                CaseRecord(
+                    case_id=d["case_id"],
+                    name=d.get("name", d["case_id"]),
+                    uploaded_by=d.get("uploaded_by", "unknown"),
+                    uploaded_at=d.get("uploaded_at"),
+                    ready=d.get("ready", False),
+                    project=d.get("project", ""),
+                )
+            )
+        return sorted(out, key=lambda case: case.case_id)
 
     def names_for(self, case_ids: list[str]) -> list[str]:
         return [(self.get(cid).name if self.get(cid) else cid) for cid in case_ids]
