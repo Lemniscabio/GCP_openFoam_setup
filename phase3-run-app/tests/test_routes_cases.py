@@ -163,3 +163,39 @@ def test_finalize_rejects_missing_metadata():
     )
     assert response.status_code == 400
     assert "metadata.json" in response.json()["detail"]
+
+
+def test_list_cases_returns_project_and_name(client, mem_case_records):
+    import datetime as _dt
+
+    from core.case_records import CaseRecord
+
+    mem_case_records.upsert(
+        CaseRecord(
+            case_id="case_0006",
+            name="WT v3",
+            uploaded_by="k@lemnisca.bio",
+            uploaded_at=_dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc),
+            ready=True,
+            project="turbine",
+        )
+    )
+    response = client.get("/api/cases")
+    assert response.status_code == 200
+    case = response.json()["cases"][0]
+    assert case["case_id"] == "case_0006"
+    assert case["project"] == "turbine"
+    assert case["name"] == "WT v3"
+
+
+def test_list_projects(client, mem_projects):
+    import datetime as _dt
+
+    mem_projects.ensure(
+        "turbine",
+        "k@lemnisca.bio",
+        _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc),
+    )
+    response = client.get("/api/projects")
+    assert response.status_code == 200
+    assert any(project["name"] == "turbine" for project in response.json()["projects"])

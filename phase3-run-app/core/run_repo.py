@@ -36,6 +36,8 @@ class RunRepository(Protocol):
     def existing_ids(self) -> set[str]: ...
     def get(self, batch_job_id: str) -> RunRecord | None: ...
     def list_recent(self, limit: int = 50) -> list[RunRecord]: ...
+    def list_all(self, limit: int = 200) -> list["RunRecord"]: ...
+    def list_by_user(self, email: str, limit: int = 200) -> list["RunRecord"]: ...
     def update_state(
         self, batch_job_id: str, state: str,
         finished_at: datetime.datetime | None = None,
@@ -70,6 +72,16 @@ class InMemoryRunRepository:
     def list_recent(self, limit: int = 50) -> list[RunRecord]:
         ordered = sorted(self._runs.values(), key=lambda r: r.submitted_at, reverse=True)
         return ordered[:limit]
+
+    def list_all(self, limit: int = 200) -> list[RunRecord]:
+        return self.list_recent(limit)
+
+    def list_by_user(self, email: str, limit: int = 200) -> list[RunRecord]:
+        return [
+            record
+            for record in self.list_recent(10_000)
+            if record.submitted_by == email
+        ][:limit]
 
     def update_state(self, batch_job_id, state, finished_at=None) -> None:
         rec = self._runs.get(batch_job_id)
@@ -150,6 +162,20 @@ class FirestoreRunRepository:
         from google.cloud.firestore import Query  # type: ignore
         q = (
             self._c.collection(self._col)
+            .order_by("submitted_at", direction=Query.DESCENDING)
+            .limit(limit)
+        )
+        return [self._from_dict(d.to_dict()) for d in q.stream()]
+
+    def list_all(self, limit: int = 200) -> list[RunRecord]:
+        return self.list_recent(limit)
+
+    def list_by_user(self, email: str, limit: int = 200) -> list[RunRecord]:
+        from google.cloud.firestore import Query  # type: ignore
+
+        q = (
+            self._c.collection(self._col)
+            .where("submitted_by", "==", email)
             .order_by("submitted_at", direction=Query.DESCENDING)
             .limit(limit)
         )

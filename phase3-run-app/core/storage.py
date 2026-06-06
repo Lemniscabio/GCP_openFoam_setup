@@ -3,6 +3,7 @@ from typing import Protocol
 class StorageClient(Protocol):
     def object_exists(self, path: str) -> bool: ...
     def list_paths(self, prefix: str) -> list[str]: ...
+    def list_objects(self, prefix: str) -> list[tuple[str, int]]: ...
     def create_exclusive(self, path: str, data: bytes) -> bool:
         """Create object only if it does not exist. True if created, False if it already existed."""
         ...
@@ -34,6 +35,13 @@ class InMemoryStorage:
 
     def list_paths(self, prefix: str) -> list[str]:
         return sorted(path for path in self._objs if path.startswith(prefix))
+
+    def list_objects(self, prefix: str) -> list[tuple[str, int]]:
+        return sorted(
+            (path, len(data))
+            for path, data in self._objs.items()
+            if path.startswith(prefix)
+        )
 
     def list_case_ids(self) -> list[str]:
         ids = set()
@@ -73,6 +81,12 @@ class GcsStorage:
 
     def list_paths(self, prefix: str) -> list[str]:
         return [b.name for b in self._client.list_blobs(self._bucket_name, prefix=prefix)]
+
+    def list_objects(self, prefix: str) -> list[tuple[str, int]]:
+        return [
+            (blob.name, blob.size or 0)
+            for blob in self._client.list_blobs(self._bucket_name, prefix=prefix)
+        ]
 
     def list_case_ids(self) -> list[str]:
         ids = set()

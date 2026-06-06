@@ -58,6 +58,9 @@ class _FakeUrls:
             for file in files
         ]
 
+    def get_url(self, obj_path, now):
+        return f"https://signed-get/{obj_path}"
+
 
 @pytest.fixture
 def mem_storage():

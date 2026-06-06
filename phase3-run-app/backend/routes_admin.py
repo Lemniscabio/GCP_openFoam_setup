@@ -3,7 +3,7 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.deps import settings, user_repo
+from backend.deps import run_repo, settings, user_repo
 from backend.rbac import require_admin
 from backend.schemas import SetUserReq
 from core.users import ROLES, STATUSES
@@ -14,6 +14,17 @@ router = APIRouter()
 @router.get("/admin/users")
 def list_users(account=Depends(require_admin), repo=Depends(user_repo)):
     return {"users": [dataclasses.asdict(u) for u in repo.list_all()]}
+
+
+@router.get("/admin/runs")
+def admin_runs(
+    user: str | None = None,
+    limit: int = 200,
+    account=Depends(require_admin),
+    runs=Depends(run_repo),
+):
+    records = runs.list_by_user(user, limit) if user else runs.list_all(limit)
+    return {"runs": [dataclasses.asdict(record) for record in records]}
 
 
 @router.post("/admin/users/{email}")

@@ -77,3 +77,11 @@ def test_firestore_round_trip_includes_project():
     repo = FirestoreCaseRecordRepository(_Firestore())
     repo.upsert(_rec())
     assert repo.get("case_0006").project == "turbine"
+
+
+def test_list_all():
+    repo = InMemoryCaseRecordRepository()
+    repo.upsert(_rec("case_0006", "WT v3"))
+    repo.upsert(_rec("case_0007", "Nozzle"))
+    ids = sorted(record.case_id for record in repo.list_all())
+    assert ids == ["case_0006", "case_0007"]
