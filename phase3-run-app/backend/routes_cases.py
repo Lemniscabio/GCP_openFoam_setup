@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import json
 
@@ -93,10 +94,10 @@ def finalize(
 
 
 @router.get("/cases")
-def list_cases(account=Depends(require_active), repo=Depends(case_repo)):
-    return {
-        "cases": [
-            {"case_id": case.case_id, "project": case.project, "ready": case.ready}
-            for case in repo.list_cases()
-        ]
-    }
+def list_cases(account=Depends(require_active), records=Depends(case_record_repo)):
+    return {"cases": [dataclasses.asdict(case) for case in records.list_all()]}
+
+
+@router.get("/projects")
+def list_projects(account=Depends(require_active), projects=Depends(project_repo)):
+    return {"projects": [dataclasses.asdict(project) for project in projects.list_all()]}
