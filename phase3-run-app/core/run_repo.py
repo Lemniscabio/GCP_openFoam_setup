@@ -171,15 +171,14 @@ class FirestoreRunRepository:
         return self.list_recent(limit)
 
     def list_by_user(self, email: str, limit: int = 200) -> list[RunRecord]:
-        from google.cloud.firestore import Query  # type: ignore
-
-        q = (
-            self._c.collection(self._col)
-            .where("submitted_by", "==", email)
-            .order_by("submitted_at", direction=Query.DESCENDING)
-            .limit(limit)
+        q = self._c.collection(self._col).where("submitted_by", "==", email)
+        records = [self._from_dict(d.to_dict()) for d in q.stream()]
+        records.sort(
+            key=lambda record: record.submitted_at
+            or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
+            reverse=True,
         )
-        return [self._from_dict(d.to_dict()) for d in q.stream()]
+        return records[:limit]
 
     def update_state(self, batch_job_id, state, finished_at=None) -> None:
         from google.cloud import firestore  # type: ignore
