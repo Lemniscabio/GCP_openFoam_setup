@@ -9,6 +9,7 @@ from core.batch_jobs import BatchJobBuilder, BatchSubmitter
 from core.case_records import FirestoreCaseRecordRepository
 from core.cases import CaseRepository
 from core.config import Settings
+from core.projects import FirestoreProjectRepository
 from core.run_repo import FirestoreRunRepository
 from core.status import RunStatusService
 from core.storage import GcsStorage
@@ -86,6 +87,10 @@ def _firestore():
 
 def case_record_repo() -> FirestoreCaseRecordRepository:
     return FirestoreCaseRecordRepository(_firestore())
+
+
+def project_repo() -> FirestoreProjectRepository:
+    return FirestoreProjectRepository(_firestore())
 
 
 def run_repo() -> FirestoreRunRepository:
