@@ -79,3 +79,47 @@ def test_non_admin_forbidden(client, mem_users):
     r = client.get("/api/admin/users")
     assert r.status_code == 403
     app.dependency_overrides.pop(rbac.current_account, None)
+
+
+def test_admin_runs_all_and_by_user(client, mem_runs):
+    from core.run_repo import RunRecord
+
+    def make_run(job, submitted_by):
+        return RunRecord(
+            batch_job_id=job,
+            job_name=job,
+            submitted_by=submitted_by,
+            submitted_at=NOW,
+            region="us-central1",
+            machine_type="c2d-highcpu-8",
+            mpi_ranks=4,
+            spot=False,
+            case_ids=["case_0006"],
+            case_names=["WT"],
+            project="turbine",
+        )
+
+    mem_runs.create(make_run("phoenix", "k@lemnisca.bio"))
+    mem_runs.create(make_run("otter", "g@lemnisca.bio"))
+    all_runs = client.get("/api/admin/runs").json()["runs"]
+    assert {run["batch_job_id"] for run in all_runs} == {"phoenix", "otter"}
+    user_runs = client.get("/api/admin/runs?user=k@lemnisca.bio").json()["runs"]
+    assert [run["batch_job_id"] for run in user_runs] == ["phoenix"]
+
+
+def test_admin_runs_forbidden_for_non_admin(client, mem_runs):
+    from backend import rbac
+    from backend.auth import User
+    from backend.main import app
+
+    app.dependency_overrides[rbac.current_account] = lambda: (
+        User(email="v@lemnisca.bio", sub="v"),
+        UserRecord(
+            email="v@lemnisca.bio",
+            role="viewer",
+            status="active",
+            requested_at=datetime.datetime.now(datetime.timezone.utc),
+        ),
+    )
+    assert client.get("/api/admin/runs").status_code == 403
+    app.dependency_overrides.pop(rbac.current_account, None)
