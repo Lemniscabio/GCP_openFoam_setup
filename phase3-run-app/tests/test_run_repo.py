@@ -82,3 +82,20 @@ def test_firestore_shape_round_trip_includes_project():
         "project": "turbine",
     })
     assert got.project == "turbine"
+
+
+def test_list_all_and_by_user():
+    repo = InMemoryRunRepository()
+    first = _rec(job_id="phoenix")
+    first.submitted_by = "k@lemnisca.bio"
+    second = _rec(job_id="otter")
+    second.submitted_by = "g@lemnisca.bio"
+    repo.create(first)
+    repo.create(second)
+    assert {record.batch_job_id for record in repo.list_all()} == {
+        "phoenix",
+        "otter",
+    }
+    assert [
+        record.batch_job_id for record in repo.list_by_user("k@lemnisca.bio")
+    ] == ["phoenix"]
