@@ -6,7 +6,7 @@ import { api, type Me } from "./lib/client";
 import { usePanelVariants } from "./lib/motion";
 import { UploadView } from "./views/UploadView";
 import { CasesView } from "./views/CasesView";
-import { RunView } from "./views/RunView";
+import { SubmitView } from "./views/SubmitView";
 import { RunsView } from "./views/RunsView";
 
 const UploadSection = UploadView as ComponentType<{
@@ -20,7 +20,7 @@ const CasesSection = CasesView as unknown as ComponentType<{
   onSubmit: () => void;
   canRun: boolean;
 }>;
-const SubmitSection = RunView as ComponentType<{
+const SubmitSection = SubmitView as ComponentType<{
   project: string | null;
   caseIds: string[];
   canSubmit: boolean;
