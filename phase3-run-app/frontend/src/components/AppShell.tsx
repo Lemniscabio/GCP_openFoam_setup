@@ -42,31 +42,41 @@ export function AppShell({
         animate="visible"
         variants={panelVariants}
       >
-        <div className="header">
+        <header className="header">
           <div className="brand">
             <div className="brand-mark">OF</div>
             <div className="brand-name">
               OpenFOAM Batch <span>· cfd-lemnisca</span>
             </div>
           </div>
-          <div className="tabs">
+          <nav className="tabs" aria-label="Primary navigation">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 className={`tab${tab === t.id ? " on" : ""}`}
                 onClick={() => onTab(t.id)}
+                aria-current={tab === t.id ? "page" : undefined}
               >
                 <div className="tab-num">{t.n}</div>
                 <span>{t.label}</span>
               </button>
             ))}
+          </nav>
+          <div className="profile" title={me.email}>
+            <div className="profile-avatar" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img">
+                <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" />
+              </svg>
+            </div>
+            <div className="profile-copy">
+              <span className="profile-email">{me.email}</span>
+              <span className="profile-label">Signed in</span>
+            </div>
+            <Badge className="profile-role" variant="secondary">
+              {me.role ?? "pending"}
+            </Badge>
           </div>
-          <div className="header-spacer" />
-          <div className="header-meta">
-            <span style={{ fontFamily: "var(--f-mono)" }}>{me.email}</span>
-            <Badge variant="secondary">{me.role ?? "pending"}</Badge>
-          </div>
-        </div>
+        </header>
         <div className="stage">{children}</div>
       </motion.div>
     </>
