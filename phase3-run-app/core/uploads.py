@@ -12,13 +12,13 @@ from dataclasses import dataclass
 DEFAULT_TTL = datetime.timedelta(minutes=30)
 
 
-def case_prefix(case_id: str) -> str:
-    return f"cases/{case_id}/"
+def case_prefix(project: str, case_id: str) -> str:
+    return f"cases/{project}/{case_id}/"
 
 
-def object_path(case_id: str, relative_path: str) -> str:
-    """Map a case file's relative path to its bucket object under cases/<id>/case/."""
-    return f"cases/{case_id}/case/{relative_path.lstrip('/')}"
+def object_path(project: str, case_id: str, relative_path: str) -> str:
+    """Map a case file under cases/<project>/<id>/case/."""
+    return f"cases/{project}/{case_id}/case/{relative_path.lstrip('/')}"
 
 
 @dataclass
@@ -53,6 +53,14 @@ class SignedUrlService:
         )
         return SignedUpload(object_path=obj_path, url=url)
 
-    def put_urls_for_case(self, case_id: str, relative_paths: list[str],
-                          now: datetime.datetime) -> list[SignedUpload]:
-        return [self.put_url(object_path(case_id, rp), now) for rp in relative_paths]
+    def put_urls_for_case(
+        self,
+        project: str,
+        case_id: str,
+        relative_paths: list[str],
+        now: datetime.datetime,
+    ) -> list[SignedUpload]:
+        return [
+            self.put_url(object_path(project, case_id, path), now)
+            for path in relative_paths
+        ]

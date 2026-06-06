@@ -3,12 +3,14 @@ from core.uploads import SignedUrlService, object_path, case_prefix
 
 
 def test_case_prefix():
-    assert case_prefix("case_0042") == "cases/case_0042/"
+    assert case_prefix("turbine", "case_0042") == "cases/turbine/case_0042/"
 
 
 def test_object_path_maps_under_case_tree():
-    assert object_path("case_0042", "system/fvSolution") == "cases/case_0042/case/system/fvSolution"
-    assert object_path("case_0042", "/0/U") == "cases/case_0042/case/0/U"
+    assert object_path("turbine", "case_0042", "system/fvSolution") == \
+        "cases/turbine/case_0042/case/system/fvSolution"
+    assert object_path("turbine", "case_0042", "/0/U") == \
+        "cases/turbine/case_0042/case/0/U"
 
 
 class _FakeBlob:
@@ -46,5 +48,11 @@ def test_put_url_is_keyless_v4_put():
 def test_put_urls_for_case_maps_all_files():
     bkt = _FakeBucket()
     svc = SignedUrlService(bkt, signer_email="sa@x.iam.gserviceaccount.com", token_provider=lambda: "t")
-    ups = svc.put_urls_for_case("case_0007", ["0/U", "system/controlDict"], datetime.datetime(2026, 6, 3, 12, 0, 0))
-    assert [u.object_path for u in ups] == ["cases/case_0007/case/0/U", "cases/case_0007/case/system/controlDict"]
+    ups = svc.put_urls_for_case("turbine", "case_0007", ["0/U", "system/controlDict"], datetime.datetime(2026, 6, 3, 12, 0, 0))
+    assert [u.object_path for u in ups] == ["cases/turbine/case_0007/case/0/U", "cases/turbine/case_0007/case/system/controlDict"]
+
+
+def test_object_path_includes_project():
+    assert case_prefix("turbine", "case_0001") == "cases/turbine/case_0001/"
+    assert object_path("turbine", "case_0001", "system/controlDict") == \
+        "cases/turbine/case_0001/case/system/controlDict"
