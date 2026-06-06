@@ -3,11 +3,13 @@ import os
 os.environ["OF_DEV_NO_IAP"] = "1"
 
 import pytest
+import datetime
 from fastapi.testclient import TestClient
 
 from backend import deps
 from backend.main import app
-from core.case_records import InMemoryCaseRecordRepository
+from core.case_records import CaseRecord, InMemoryCaseRecordRepository
+from core.projects import InMemoryProjectRepository
 from core.run_repo import InMemoryRunRepository
 from core.storage import InMemoryStorage
 from core.users import InMemoryUserRepository
@@ -16,6 +18,7 @@ from core.users import InMemoryUserRepository
 _store = InMemoryStorage()
 _case_records = InMemoryCaseRecordRepository()
 _runs = InMemoryRunRepository()
+_projects = InMemoryProjectRepository()
 _submissions = []
 
 
@@ -23,6 +26,14 @@ class _FakeSubmitter:
     def submit(self, job_name, spec):
         _submissions.append((job_name, spec))
         return f"projects/p/locations/us-central1/jobs/{job_name}"
+
+
+class _FakeBuilder:
+    def build_single(self, **kwargs):
+        return kwargs
+
+    def build_multi(self, **kwargs):
+        return kwargs
 
 
 class _FakeStatus:
@@ -52,7 +63,9 @@ app.dependency_overrides[deps.submitter] = lambda: _FakeSubmitter()
 app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
 app.dependency_overrides[deps.storage] = lambda: _store
 app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
+app.dependency_overrides[deps.project_repo] = lambda: _projects
 app.dependency_overrides[deps.run_repo] = lambda: _runs
+app.dependency_overrides[deps.builder] = lambda: _FakeBuilder()
 # RBAC's current_account eagerly resolves user_repo; override it so tests never build
 # a real Firestore client (fails in CI: no ADC). Dev mode returns an active admin.
 app.dependency_overrides[deps.user_repo] = lambda: _users
@@ -67,14 +80,26 @@ def _override_deps():
     app.dependency_overrides[deps.status_service] = lambda: _FakeStatus()
     app.dependency_overrides[deps.storage] = lambda: _store
     app.dependency_overrides[deps.case_record_repo] = lambda: _case_records
+    app.dependency_overrides[deps.project_repo] = lambda: _projects
     app.dependency_overrides[deps.run_repo] = lambda: _runs
+    app.dependency_overrides[deps.builder] = lambda: _FakeBuilder()
 
 
-def _seed_valid_case(case_id):
-    _store.upload_bytes(f"cases/{case_id}/case/system/controlDict", b"x")
-    _store.upload_bytes(f"cases/{case_id}/case/command.sh", b"mpirun -np ${MPI_RANKS} foamRun -parallel")
-    _store.upload_bytes(f"cases/{case_id}/manifest.json", b'{"case_id":"x"}')
-    _store.upload_bytes(f"cases/{case_id}/READY", b"2026-06-01")
+def _seed_valid_case(case_id, project="turbine"):
+    base = f"cases/{project}/{case_id}"
+    _store.upload_bytes(f"{base}/case/system/controlDict", b"x")
+    _store.upload_bytes(f"{base}/case/command.sh", b"mpirun -np ${MPI_RANKS} foamRun -parallel")
+    _store.upload_bytes(f"{base}/case/metadata.json", b"{}")
+    _store.upload_bytes(f"{base}/manifest.json", b'{"case_id":"x"}')
+    _store.upload_bytes(f"{base}/READY", b"2026-06-01")
+    _case_records.upsert(CaseRecord(
+        case_id=case_id,
+        name=case_id,
+        uploaded_by="dev@lemnisca.bio",
+        uploaded_at=datetime.datetime.now(datetime.timezone.utc),
+        ready=True,
+        project=project,
+    ))
 
 
 def test_submit_single():
@@ -112,7 +137,11 @@ def test_submit_multi():
 
 def test_submit_rejects_unvalidated_case():
     _submissions.clear()
-    _store.upload_bytes("cases/case_0099/.reserved", b"")
+    _store.upload_bytes("cases/turbine/case_0099/.reserved", b"")
+    _case_records.upsert(CaseRecord(
+        case_id="case_0099", name="case_0099", uploaded_by="dev@lemnisca.bio",
+        uploaded_at=datetime.datetime.now(datetime.timezone.utc), project="turbine",
+    ))
 
     r = client.post(
         "/api/jobs",
@@ -188,6 +217,31 @@ def test_submit_writes_run_record(client, valid_case, mem_runs, mem_case_records
     assert rec.case_names == ["Wind Tunnel v3"]
     assert rec.machine_type == "c2d-highcpu-8"
     assert rec.state == "SUBMITTED"
+    assert rec.project == "turbine"
+
+
+def test_submit_rejects_cases_from_multiple_projects():
+    _seed_valid_case("case_0101", "turbine")
+    _seed_valid_case("case_0102", "wing")
+    response = client.post("/api/jobs", json={
+        "case_ids": ["case_0101", "case_0102"],
+        "machine_type": "c2d-highcpu-2",
+        "job_name": "mixedprojects",
+    })
+    assert response.status_code == 400
+    assert response.json()["detail"] == "all cases in a job must share one project"
+
+
+def test_submit_rejects_case_missing_project():
+    _seed_valid_case("case_0103")
+    record = _case_records.get("case_0103")
+    record.project = ""
+    response = client.post("/api/jobs", json={
+        "case_ids": ["case_0103"],
+        "machine_type": "c2d-highcpu-2",
+        "job_name": "missingproject",
+    })
+    assert response.status_code == 400
 
 
 def test_reconcile_marks_deleted_run_cancelled(client, mem_runs):
@@ -268,7 +322,7 @@ def test_suggest_job_name_returns_unused_valid(client, mem_runs):
 def test_submit_uses_codename_as_id_and_folder(client, valid_case, mem_runs):
     r = client.post("/api/jobs", json={
         "case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "phoenix"})
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     assert r.json()["batch_job_id"] == "phoenix"
     rec = mem_runs.get("phoenix")
     assert rec is not None and rec.job_name == "phoenix"
@@ -282,7 +336,8 @@ def test_submit_rejects_invalid_job_name(client, valid_case):
 
 def test_submit_rejects_taken_job_name(client, valid_case, mem_runs):
     body = {"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "phoenix"}
-    assert client.post("/api/jobs", json=body).status_code == 200
+    response = client.post("/api/jobs", json=body)
+    assert response.status_code == 200, response.text
     assert client.post("/api/jobs", json=body).status_code == 400  # taken
 
 
@@ -290,5 +345,5 @@ def test_submit_dedupes_case_ids(client, valid_case, mem_runs):
     r = client.post("/api/jobs", json={
         "case_ids": ["case_0006", "case_0006"], "machine_type": "c2d-highcpu-8",
         "job_name": "otter"})
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     assert mem_runs.get("otter").case_ids == ["case_0006"]

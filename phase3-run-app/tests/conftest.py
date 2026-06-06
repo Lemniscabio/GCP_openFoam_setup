@@ -24,6 +24,7 @@ class _TestCaseRecordRepository(InMemoryCaseRecordRepository):
                 uploaded_by="dev@lemnisca.bio",
                 uploaded_at=datetime.datetime.now(datetime.timezone.utc),
                 ready=True,
+                project="turbine",
             )
         )
 
@@ -35,6 +36,14 @@ class _FakeSubmitter:
     def submit(self, job_name, spec):
         self.submissions.append((job_name, spec))
         return f"projects/p/locations/us-central1/jobs/{job_name}"
+
+
+class _FakeBuilder:
+    def build_single(self, **kwargs):
+        return kwargs
+
+    def build_multi(self, **kwargs):
+        return kwargs
 
 
 class _FakeUrls:
@@ -81,7 +90,7 @@ def fake_submitter():
 
 
 @pytest.fixture
-def valid_case(mem_storage):
+def valid_case(mem_storage, mem_case_records):
     case_id = "case_0006"
     base = f"cases/turbine/{case_id}"
     mem_storage.upload_bytes(f"{base}/case/system/controlDict", b"x")
@@ -92,6 +101,7 @@ def valid_case(mem_storage):
     mem_storage.upload_bytes(f"{base}/case/metadata.json", b"{}")
     mem_storage.upload_bytes(f"{base}/manifest.json", b'{"case_id":"case_0006"}')
     mem_storage.upload_bytes(f"{base}/READY", b"2026-06-01")
+    mem_case_records.upsert_name(case_id, case_id)
     return case_id
 
 
@@ -106,6 +116,7 @@ def client(mem_storage, mem_case_records, mem_projects, mem_runs, mem_users, fak
     test_app.dependency_overrides[deps.run_repo] = lambda: mem_runs
     test_app.dependency_overrides[deps.user_repo] = lambda: mem_users
     test_app.dependency_overrides[deps.submitter] = lambda: fake_submitter
+    test_app.dependency_overrides[deps.builder] = lambda: _FakeBuilder()
     test_app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
     # list_runs reconcile needs a Batch state getter; default fake reports RUNNING so
     # existing RUNNING runs are unchanged (deleted-job tests override this to None).
