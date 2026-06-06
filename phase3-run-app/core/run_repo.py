@@ -3,7 +3,11 @@ from dataclasses import dataclass
 from typing import Protocol
 
 # Batch job states considered terminal (no further transitions expected).
-TERMINAL_STATES = {"SUCCEEDED", "FAILED", "DELETION_IN_PROGRESS", "CANCELLED"}
+# NOTE: DELETION_IN_PROGRESS is deliberately NOT terminal — it's a transient state
+# Batch emits while deleting a job. Treating it as terminal froze deleted runs there
+# forever (reconcile skips terminal runs). Left non-terminal, reconcile sees the job
+# vanish from Batch and resolves it to CANCELLED.
+TERMINAL_STATES = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
 @dataclass

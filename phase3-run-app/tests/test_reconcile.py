@@ -47,6 +47,18 @@ def test_live_state_synced_when_event_was_missed():
     assert rec.state == "SUCCEEDED" and rec.finished_at == NOW
 
 
+def test_deletion_in_progress_is_not_terminal_and_resolves_to_cancelled():
+    # Batch emits DELETION_IN_PROGRESS while deleting; it must NOT be treated as
+    # terminal, or reconcile would skip it and the run would freeze there forever.
+    from core.run_repo import TERMINAL_STATES
+    assert "DELETION_IN_PROGRESS" not in TERMINAL_STATES
+    repo = InMemoryRunRepository()
+    _run(repo, "deleting", "DELETION_IN_PROGRESS")
+    changed = reconcile_non_terminal(repo, get_state=lambda jid: None, now=NOW)
+    assert changed == 1
+    assert repo.get("deleting").state == "CANCELLED"
+
+
 def test_unchanged_when_state_matches():
     repo = InMemoryRunRepository()
     _run(repo, "j", "RUNNING")
