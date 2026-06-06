@@ -1,18 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppShell, type Tab } from "./components/AppShell";
 import { tokenStore } from "./lib/auth";
 import { api, type Me } from "./lib/client";
 import { usePanelVariants } from "./lib/motion";
 import { UploadView } from "./views/UploadView";
-import { AdminView } from "./views/AdminView";
 import { CasesView } from "./views/CasesView";
 import { RunView } from "./views/RunView";
 import { RunsView } from "./views/RunsView";
 
+const UploadSection = UploadView as ComponentType<{
+  onUploaded: (project: string, ids: string[]) => void;
+}>;
+const CasesSection = CasesView as unknown as ComponentType<{
+  activeProject: string | null;
+  selectedCaseIds: string[];
+  onChange: (ids: string[]) => void;
+  onActiveProject: (project: string) => void;
+  onSubmit: () => void;
+  canRun: boolean;
+}>;
+const SubmitSection = RunView as ComponentType<{
+  project: string | null;
+  caseIds: string[];
+  canSubmit: boolean;
+  onSubmitted: () => void;
+}>;
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [activeProject, setActiveProject] = useState<string | null>(null);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [view, setView] = useState<"section" | "profile">("section");
   const [me, setMe] = useState<Me | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const panelVariants = usePanelVariants();
@@ -33,15 +52,6 @@ export default function App() {
 
   const canRun = me?.role !== "viewer";
 
-  useEffect(() => {
-    if (!me) return;
-    if (!canRun && (tab === "upload" || tab === "run")) {
-      setTab("cases");
-      return;
-    }
-    if (tab === "admin" && me.role !== "admin") setTab("cases");
-  }, [canRun, me, tab]);
-
   if (accessError) {
     return <AccessState title="Unable to verify access" detail={accessError} />;
   }
@@ -59,35 +69,71 @@ export default function App() {
   }
 
   return (
-    <AppShell tab={tab} onTab={setTab} me={me} canRun={canRun}>
+    <AppShell
+      tab={tab}
+      onTab={(nextTab) => { setTab(nextTab); setView("section"); }}
+      onProfile={() => setView("profile")}
+      me={me}
+    >
       <AnimatePresence mode="wait">
         <motion.div
-          key={tab}
+          key={view === "profile" ? "profile" : tab}
           initial="hidden"
           animate="visible"
           exit="exit"
           variants={panelVariants}
           style={{ display: "contents" }}
         >
-          {tab === "upload" && <UploadView />}
+          {view === "profile" ? (
+            <Placeholder title="Profile" onBack={() => setView("section")} />
+          ) : (
+            <>
+          {tab === "upload" && (
+            <UploadSection onUploaded={(project, ids) => {
+              setActiveProject(project);
+              setSelectedCaseIds(ids);
+              setTab("cases");
+            }} />
+          )}
           {tab === "cases" && (
-            <CasesView
+            <CasesSection
+              activeProject={activeProject}
+              selectedCaseIds={selectedCaseIds}
               canRun={canRun}
-              onRun={(ids) => {
-                if (!canRun) return;
-                setSelected(ids);
-                setTab("run");
-              }}
+              onChange={setSelectedCaseIds}
+              onActiveProject={setActiveProject}
+              onSubmit={() => setTab("submit")}
             />
           )}
-          {tab === "run" && (
-            <RunView caseIds={selected} canSubmit={canRun} onSubmitted={() => setTab("runs")} />
+          {tab === "submit" && (
+            <SubmitSection
+              project={activeProject}
+              caseIds={selectedCaseIds}
+              canSubmit={canRun}
+              onSubmitted={() => setTab("status")}
+            />
           )}
-          {tab === "runs" && <RunsView />}
-          {tab === "admin" && me.role === "admin" && <AdminView />}
+          {tab === "status" && <RunsView />}
+          {tab === "results" && <Placeholder title="Results" />}
+            </>
+          )}
         </motion.div>
       </AnimatePresence>
     </AppShell>
+  );
+}
+
+function Placeholder({ title, onBack }: { title: string; onBack?: () => void }) {
+  return (
+    <div className="step" style={{ gridTemplateColumns: "1fr" }}>
+      <div className="panel">
+        <div className="panel-head">
+          <div className="ph-text"><div className="ph-title">{title}</div></div>
+          {onBack && <button className="btn-add" onClick={onBack}>Back</button>}
+        </div>
+        <div className="panel-body"><div className="empty-state">Loading section…</div></div>
+      </div>
+    </div>
   );
 }
 
