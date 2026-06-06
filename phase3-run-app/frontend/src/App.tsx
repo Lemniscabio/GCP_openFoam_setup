@@ -8,6 +8,7 @@ import { UploadView } from "./views/UploadView";
 import { CasesView } from "./views/CasesView";
 import { SubmitView } from "./views/SubmitView";
 import { RunsView } from "./views/RunsView";
+import { ResultsView } from "./views/ResultsView";
 
 const UploadSection = UploadView as ComponentType<{
   onUploaded: (project: string, ids: string[]) => void;
@@ -114,7 +115,7 @@ export default function App() {
             />
           )}
           {tab === "status" && <RunsView />}
-          {tab === "results" && <Placeholder title="Results" />}
+          {tab === "results" && <ResultsView />}
             </>
           )}
         </motion.div>
