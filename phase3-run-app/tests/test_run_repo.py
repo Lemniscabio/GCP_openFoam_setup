@@ -1,12 +1,13 @@
 import datetime
 
-from core.run_repo import RunRecord, InMemoryRunRepository
+from core.run_repo import FirestoreRunRepository, RunRecord, InMemoryRunRepository
 
 
 def _rec(job_id="of-multi-x-20260101", state="SUBMITTED"):
     return RunRecord(
         batch_job_id=job_id,
         job_name="windtunnel-v3",
+        project="turbine",
         submitted_by="kartikey.attri@lemnisca.bio",
         submitted_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
         region="us-central1",
@@ -26,6 +27,7 @@ def test_create_then_get():
     got = repo.get("of-multi-x-20260101")
     assert got.job_name == "windtunnel-v3"
     assert got.state == "SUBMITTED"
+    assert got.project == "turbine"
 
 
 def test_list_orders_newest_first():
@@ -72,3 +74,11 @@ def test_existing_ids():
     repo.try_reserve(_rec(job_id="phoenix"))
     repo.try_reserve(_rec(job_id="otter"))
     assert repo.existing_ids() == {"phoenix", "otter"}
+
+
+def test_firestore_shape_round_trip_includes_project():
+    got = FirestoreRunRepository._from_dict({
+        **_rec().__dict__,
+        "project": "turbine",
+    })
+    assert got.project == "turbine"

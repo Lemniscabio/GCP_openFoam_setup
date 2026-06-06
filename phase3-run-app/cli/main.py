@@ -11,6 +11,7 @@ from core.config import Settings
 from core.machines import MachineCatalog
 from core.naming import canonical_case_id
 from core.storage import GcsStorage
+from core.uploads import object_path
 from core.validation import validate_case
 
 
@@ -26,15 +27,16 @@ def list_cases(settings: Settings):
     """List all cases in the bucket."""
     repo = CaseRepository(GcsStorage(settings.bucket))
     for c in repo.list_cases():
-        click.echo(f"{c.case_id}\t{'READY' if c.ready else 'incomplete'}")
+        click.echo(f"{c.project}\t{c.case_id}\t{'READY' if c.ready else 'incomplete'}")
 
 
 @cli.command()
 @click.argument("case_id")
+@click.option("--project", required=True)
 @click.pass_obj
-def validate(settings: Settings, case_id: str):
+def validate(settings: Settings, case_id: str, project: str):
     """Validate an uploaded case (replaces check_case_prefix.sh)."""
-    result = validate_case(GcsStorage(settings.bucket), case_id)
+    result = validate_case(GcsStorage(settings.bucket), project, case_id)
     for e in result.errors:
         click.echo(f"FAIL: {e}", err=True)
     for w in result.warnings:
@@ -49,22 +51,32 @@ def validate(settings: Settings, case_id: str):
 @click.option("--command-sh", required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option("--case-id", default="AUTO", help="explicit id or AUTO")
 @click.option("--openfoam-version", default="12")
+@click.option("--project", required=True)
 @click.pass_obj
-def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version):
+def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version, project):
     """Upload a local case as a file tree (no tar)."""
     storage = GcsStorage(settings.bucket)
     repo = CaseRepository(storage)
-    cid = repo.allocate_ids(1)[0] if case_id.upper() == "AUTO" else canonical_case_id(case_id)
-    base = f"gs://{settings.bucket}/cases/{cid}"
+    cid = repo.allocate_ids(project, 1)[0] if case_id.upper() == "AUTO" else canonical_case_id(case_id)
+    base = f"gs://{settings.bucket}/cases/{project}/{cid}"
     # rsync the case tree (no tarring)
     subprocess.run(["gcloud", "storage", "rsync", "--recursive", case_dir, f"{base}/case/"], check=True)
-    subprocess.run(["gcloud", "storage", "cp", command_sh, f"{base}/case/command.sh"], check=True)
+    command_object = object_path(project, cid, "command.sh")
+    subprocess.run(
+        ["gcloud", "storage", "cp", command_sh, f"gs://{settings.bucket}/{command_object}"],
+        check=True,
+    )
     manifest = json.dumps({
         "case_id": cid, "solver_family": "openfoam", "openfoam_version": openfoam_version,
         "uploaded_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
     })
-    storage.upload_bytes(f"cases/{cid}/manifest.json", manifest.encode())
-    storage.upload_bytes(f"cases/{cid}/READY", (datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z").encode())
+    storage.upload_bytes(f"cases/{project}/{cid}/manifest.json", manifest.encode())
+    storage.upload_bytes(f"cases/{project}/{cid}/READY", (datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z").encode())
+    result = validate_case(storage, project, cid)
+    if not result.ok:
+        for error in result.errors:
+            click.echo(f"FAIL: {error}", err=True)
+        raise SystemExit(1)
     click.echo(f"Uploaded {cid} to {base}")
 
 
@@ -73,8 +85,9 @@ def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version):
 @click.option("--machine", required=True)
 @click.option("--spot/--standard", default=False)
 @click.option("--job-name", default=None, help="one-word codename (auto if omitted)")
+@click.option("--project", required=True)
 @click.pass_obj
-def run(settings: Settings, cases, machine, spot, job_name):
+def run(settings: Settings, cases, machine, spot, job_name, project):
     """Submit a single-task (1 case) or multi-task (N cases) Batch job."""
     spec_machine = MachineCatalog().get(machine)
     prov = "SPOT" if spot else "STANDARD"
@@ -86,7 +99,7 @@ def run(settings: Settings, cases, machine, spot, job_name):
     storage = GcsStorage(settings.bucket)
     errors = {}
     for case_id in ids:
-        result = validate_case(storage, case_id)
+        result = validate_case(storage, project, case_id)
         if not result.ok:
             errors[case_id] = result.errors
     if errors:
@@ -101,8 +114,8 @@ def run(settings: Settings, cases, machine, spot, job_name):
                   mpi_ranks=spec_machine["default_mpi_ranks"], provisioning_model=prov,
                   local_ssd_count=spec_machine["local_ssd_count"])
     if len(ids) == 1:
-        spec = builder.build_single(case_id=ids[0], machine_type=machine, job_name=job_name, **common)
+        spec = builder.build_single(case_id=ids[0], project=project, machine_type=machine, job_name=job_name, **common)
     else:
-        spec = builder.build_multi(case_ids=ids, machine_type=machine, job_name=job_name, **common)
+        spec = builder.build_multi(case_ids=ids, project=project, machine_type=machine, job_name=job_name, **common)
     name = submitter.submit(job_name, spec)
     click.echo(f"Submitted {name}")

@@ -102,7 +102,7 @@ chmod a+w "${{MOUNT_PATH}}"
             "disks": disks,
         }}
 
-    def build_single(self, *, case_id: str, machine_type: str, cpu_milli: int,
+    def build_single(self, *, case_id: str, project: str, machine_type: str, cpu_milli: int,
                      memory_mib: int, mpi_ranks: int, job_name: str,
                      provisioning_model: str = "STANDARD", max_retry_count: int = 3,
                      local_ssd_count: int | None = None, scratch_disk_type: str = "pd-ssd",
@@ -113,6 +113,7 @@ chmod a+w "${{MOUNT_PATH}}"
         disk = build_disk_spec(local_ssd_count, scratch_disk_type, scratch_disk_gb)
         env = {
             "BUCKET": self._bucket,
+            "PROJECT": project,
             "CASE_ID": case_id,
             "VARIANT_ID": variant,
             "JOB_NAME": job_name,
@@ -135,7 +136,7 @@ chmod a+w "${{MOUNT_PATH}}"
             "notifications": self._notifications(),
         }
 
-    def build_multi(self, *, case_ids: list[str], machine_type: str, cpu_milli: int,
+    def build_multi(self, *, case_ids: list[str], project: str, machine_type: str, cpu_milli: int,
                     memory_mib: int, mpi_ranks: int, job_name: str,
                     provisioning_model: str = "STANDARD", max_retry_count: int = 3,
                     local_ssd_count: int | None = None, scratch_disk_type: str = "pd-ssd",
@@ -148,6 +149,7 @@ chmod a+w "${{MOUNT_PATH}}"
         disk = build_disk_spec(local_ssd_count, scratch_disk_type, scratch_disk_gb)
         env = {
             "BUCKET": self._bucket,
+            "PROJECT": project,
             "CASE_ID_LIST": ",".join(case_ids),  # runtime resolves CASE_ID via BATCH_TASK_INDEX
             "VARIANT_ID": variant,
             "JOB_NAME": job_name,

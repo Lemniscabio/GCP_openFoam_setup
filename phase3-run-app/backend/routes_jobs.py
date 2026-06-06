@@ -53,9 +53,24 @@ def submit(
     # dedupe case ids, preserving order
     case_ids = list(dict.fromkeys(canonical_case_id(c) for c in req.case_ids))
 
+    case_records = [records.get(case_id) for case_id in case_ids]
+    projects_seen = {
+        record.project for record in case_records if record is not None
+    }
+    if (
+        len(case_records) != len([record for record in case_records if record])
+        or len(projects_seen) != 1
+        or "" in projects_seen
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="all cases in a job must share one project",
+        )
+    project = projects_seen.pop()
+
     errors = {}
     for case_id in case_ids:
-        result = validate_case(store, case_id)
+        result = validate_case(store, project, case_id)
         if not result.ok:
             errors[case_id] = result.errors
     if errors:
@@ -70,6 +85,7 @@ def submit(
 
     record = RunRecord(
         batch_job_id=job_name, job_name=job_name, submitted_by=user.email,
+        project=project,
         submitted_at=datetime.datetime.now(datetime.timezone.utc), region=Settings().region,
         machine_type=req.machine_type, mpi_ranks=machine["default_mpi_ranks"], spot=req.spot,
         case_ids=case_ids, case_names=records.names_for(case_ids),
@@ -78,10 +94,10 @@ def submit(
         raise HTTPException(status_code=400, detail="job name already used; pick another")
 
     if len(case_ids) == 1:
-        spec = b.build_single(case_id=case_ids[0], machine_type=req.machine_type,
+        spec = b.build_single(case_id=case_ids[0], project=project, machine_type=req.machine_type,
                               job_name=job_name, **common)
     else:
-        spec = b.build_multi(case_ids=case_ids, machine_type=req.machine_type,
+        spec = b.build_multi(case_ids=case_ids, project=project, machine_type=req.machine_type,
                              job_name=job_name, **common)
     name = sub.submit(job_name, spec)
     return {"job_name": job_name, "batch_job_id": job_name, "name": name, "submitted_by": user.email}

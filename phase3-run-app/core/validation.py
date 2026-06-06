@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field
 from core.storage import StorageClient
 
@@ -10,10 +11,12 @@ class ValidationResult:
 # sibling objects (written by finalize / CLI) that must exist under cases/<id>/
 _REQUIRED = ["manifest.json", "READY"]
 
-def validate_case(storage: StorageClient, case_id: str) -> ValidationResult:
+def validate_case(
+    storage: StorageClient, project: str, case_id: str
+) -> ValidationResult:
     errors: list[str] = []
     warnings: list[str] = []
-    base = f"cases/{case_id}"
+    base = f"cases/{project}/{case_id}"
 
     for name in _REQUIRED:
         if not storage.object_exists(f"{base}/{name}"):
@@ -31,6 +34,15 @@ def validate_case(storage: StorageClient, case_id: str) -> ValidationResult:
         cmd = storage.read_text(cmd_path)
         if "MPI_RANKS" not in cmd:
             warnings.append("command.sh does not reference MPI_RANKS (hardcoded -np?)")
+
+    meta_path = f"{base}/case/metadata.json"
+    if not storage.object_exists(meta_path):
+        errors.append("missing case/metadata.json")
+    else:
+        try:
+            json.loads(storage.read_text(meta_path))
+        except Exception:  # noqa: BLE001
+            errors.append("case/metadata.json is not valid JSON")
 
     return ValidationResult(ok=(len(errors) == 0), errors=errors, warnings=warnings)
 

@@ -6,12 +6,14 @@ class CaseUpload(BaseModel):
 
 
 class AllocateReq(BaseModel):
+    project: str
     cases: list[CaseUpload] = Field(min_length=1, max_length=200)
 
 
 class FinalizeReq(BaseModel):
     openfoam_version: str = "12"
     name: str | None = None
+    project: str
 
 
 class SubmitReq(BaseModel):

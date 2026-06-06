@@ -8,6 +8,7 @@ canonical_case_id() {
 }
 
 : "${BUCKET:?BUCKET is required}"
+: "${PROJECT:?PROJECT is required}"
 if [[ -n "${CASE_ID_LIST:-}" ]]; then
   IFS=',' read -ra _CASE_LIST <<< "${CASE_ID_LIST}"
   _IDX="${BATCH_TASK_INDEX:-0}"
@@ -21,9 +22,8 @@ CASE_ID="$(canonical_case_id "${CASE_ID}")"
 SCRATCH_ROOT="${SCRATCH_ROOT:-/mnt/disks/openfoam-scratch}"
 [[ -d "${SCRATCH_ROOT}" ]] || { echo "SCRATCH_ROOT=${SCRATCH_ROOT} missing" >&2; exit 64; }
 
-CASE_PREFIX="gs://${BUCKET}/cases/${CASE_ID}"
-RESULT_MODE=$([[ -n "${CASE_ID_LIST:-}" ]] && echo multicase || echo singlecase)
-RESULT_PREFIX="gs://${BUCKET}/results/${RESULT_MODE}/${JOB_NAME}/${CASE_ID}"
+CASE_PREFIX="gs://${BUCKET}/cases/${PROJECT}/${CASE_ID}"
+RESULT_PREFIX="gs://${BUCKET}/results/${PROJECT}/${JOB_NAME}/${CASE_ID}"
 CHECKPOINT_PREFIX="gs://${BUCKET}/checkpoints/${CASE_ID}/${VARIANT_ID}/latest"
 WORK_DIR="${SCRATCH_ROOT}/${CASE_ID}"; STAGE_DIR="${WORK_DIR}/stage"; CASE_DIR="${WORK_DIR}/case"
 mkdir -p "${STAGE_DIR}" "${CASE_DIR}"
@@ -139,6 +139,7 @@ gcloud storage cp "${STAGE_DIR}/runtime.json"       "${RESULT_PREFIX}/runtime.js
 gcloud storage cp "${STAGE_DIR}/solver.stdout.log"  "${RESULT_PREFIX}/solver.stdout.log"
 gcloud storage cp "${STAGE_DIR}/exit_code.txt"      "${RESULT_PREFIX}/exit_code.txt"
 gcloud storage cp "${STAGE_DIR}/result.tar.gz"      "${RESULT_PREFIX}/result.tar.gz"
+gcloud storage cp "${CASE_DIR}/metadata.json"        "${RESULT_PREFIX}/metadata.json" || true
 
 if [[ "${rc}" -eq 0 ]]; then
   date -u +%Y-%m-%dT%H:%M:%SZ > "${STAGE_DIR}/_SUCCESS"
