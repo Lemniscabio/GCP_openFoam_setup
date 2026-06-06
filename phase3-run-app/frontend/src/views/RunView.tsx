@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { usePanelVariants } from "@/lib/motion";
@@ -16,18 +16,29 @@ export function RunView({
 }) {
   const [machine, setMachine] = useState("c2d-highcpu-56");
   const [spot, setSpot] = useState(false);
+  const [jobName, setJobName] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const panelVariants = usePanelVariants();
 
   const mode = caseIds.length > 1 ? "multi-task" : "single";
+  const validName = /^[a-z][a-z0-9-]{1,38}$/.test(jobName);
+  const submitAllowed = canSubmit && caseIds.length > 0 && validName;
+
+  function suggestJobName() {
+    api.suggestJobName().then((r) => setJobName(r.name)).catch(() => {});
+  }
+
+  useEffect(() => {
+    suggestJobName();
+  }, []);
 
   async function submit() {
-    if (!canSubmit || caseIds.length === 0 || busy) return;
+    if (!submitAllowed || busy) return;
     setBusy(true);
     setMsg(null);
     try {
-      const r = await api.submit(caseIds, machine, spot);
+      const r = await api.submit(caseIds, machine, spot, jobName);
       setMsg(`Submitted ${r.job_name}`);
       onSubmitted();
     } catch (e) {
@@ -83,6 +94,27 @@ export function RunView({
             <div className="chips">{caseIds.map((c) => <span className="chip" key={c}>{c}</span>)}</div>
           </div>
           <div className="field">
+            <label className="lbl" htmlFor="job-name"><span>Job name</span></label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                id="job-name"
+                className="input"
+                style={{ flex: 1 }}
+                required
+                value={jobName}
+                onChange={(e) => setJobName(e.target.value)}
+                aria-invalid={!validName}
+                placeholder="phoenix"
+              />
+              <Button variant="outline" onClick={suggestJobName}>Shuffle</Button>
+            </div>
+            {!validName && (
+              <div className="empty-state" style={{ fontStyle: "normal" }}>
+                Use 2–39 lowercase letters, numbers, or hyphens; start with a letter.
+              </div>
+            )}
+          </div>
+          <div className="field">
             <label className="lbl"><span>Machine (c2d-highcpu)</span></label>
             <div className="preset-grid">
               {MACHINES.map((m) => (
@@ -101,7 +133,7 @@ export function RunView({
             </div>
           </div>
           <div className="row-end">
-            <Button disabled={!canSubmit || busy} onClick={submit}>
+            <Button disabled={!submitAllowed || busy} onClick={submit}>
               {!canSubmit ? "Read-only" : busy ? "Submitting…" : "Run job"}
             </Button>
           </div>
