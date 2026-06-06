@@ -15,6 +15,7 @@ from backend.deps import (
 )
 from backend.rbac import require_active, require_runner
 from backend.schemas import SubmitReq
+from core.codenames import is_valid_codename, suggest_unused
 from core.config import Settings
 from core.machines import MachineCatalog
 from core.naming import build_job_name, canonical_case_id
@@ -23,6 +24,11 @@ from core.run_repo import RunRecord
 from core.validation import validate_case
 
 router = APIRouter()
+
+
+@router.get("/job-name/suggest")
+def suggest_job_name(account=Depends(require_active), runs=Depends(run_repo)):
+    return {"name": suggest_unused(runs.existing_ids())}
 
 
 @router.post("/jobs")

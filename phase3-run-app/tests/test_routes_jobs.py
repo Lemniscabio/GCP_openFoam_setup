@@ -233,3 +233,18 @@ def test_submit_requires_job_name(client, valid_case):
     # job_name omitted -> 422 (Pydantic required field)
     r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
     assert r.status_code == 422
+
+
+def test_suggest_job_name_returns_unused_valid(client, mem_runs):
+    from core.codenames import is_valid_codename
+    from core.run_repo import RunRecord
+    import datetime as _dt
+    mem_runs.try_reserve(RunRecord(
+        batch_job_id="phoenix", job_name="phoenix", submitted_by="d@lemnisca.bio",
+        submitted_at=_dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc), region="us-central1",
+        machine_type="c2d-highcpu-8", mpi_ranks=4, spot=False, case_ids=["case_0006"],
+        case_names=["c"]))
+    r = client.get("/api/job-name/suggest")
+    assert r.status_code == 200
+    name = r.json()["name"]
+    assert is_valid_codename(name) and name != "phoenix"
