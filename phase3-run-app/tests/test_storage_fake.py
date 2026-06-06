@@ -35,3 +35,15 @@ def test_list_paths_returns_matching_prefixes():
         "cases/case_0001/READY",
         "cases/case_0001/case/command.sh",
     ]
+
+
+def test_list_objects_returns_name_and_size():
+    s = InMemoryStorage()
+    s.upload_bytes("results/turbine/phoenix/case_0006/result.tar.gz", b"abcd")
+    s.upload_bytes("results/turbine/phoenix/case_0006/metadata.json", b"{}")
+    s.upload_bytes("results/turbine/phoenix/case_0007/x", b"zz")
+    got = dict(s.list_objects("results/turbine/phoenix/case_0006/"))
+    assert got == {
+        "results/turbine/phoenix/case_0006/result.tar.gz": 4,
+        "results/turbine/phoenix/case_0006/metadata.json": 2,
+    }
