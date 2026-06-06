@@ -55,7 +55,7 @@ export function UploadView({
   const inputRef = useRef<HTMLInputElement>(null);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [project, setProject] = useState("");
-  const [projectListOpen, setProjectListOpen] = useState(false);
+  const [projectMode, setProjectMode] = useState<"existing" | "new">("existing");
   const [cases, setCases] = useState<CaseFiles[]>([]);
   const [log, setLog] = useState<string[]>([]);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -65,13 +65,15 @@ export function UploadView({
   const panelVariants = usePanelVariants();
   const listVariants = useListItemVariants();
   const invalidProject = projectError(project);
-  const filteredProjects = projects.filter((item) =>
-    item.name.toLocaleLowerCase().includes(project.toLocaleLowerCase()));
 
   useEffect(() => {
     let alive = true;
     api.getProjects()
-      .then((response) => { if (alive) setProjects(response.projects); })
+      .then((response) => {
+        if (!alive) return;
+        setProjects(response.projects);
+        if (response.projects.length === 0) setProjectMode("new");
+      })
       .catch((error) => { if (alive) setLog([`Unable to load projects: ${String(error)}`]); });
     return () => { alive = false; };
   }, []);
@@ -149,57 +151,53 @@ export function UploadView({
         <div className="panel-body">
           <div className="field w-full">
             <label className="lbl" htmlFor="upload-project"><span>Project</span></label>
-            <div className="relative w-full min-w-[260px]">
-              <input
-                id="upload-project"
-                className="input w-full min-w-[260px] pr-10"
-                value={project}
-                onChange={(event) => { setProject(event.target.value); setProjectListOpen(true); }}
-                onFocus={() => setProjectListOpen(true)}
-                onBlur={() => window.setTimeout(() => setProjectListOpen(false), 150)}
-                placeholder="Select or enter a project"
-                aria-autocomplete="list"
-                aria-controls="upload-project-options"
-                aria-expanded={projectListOpen}
-                aria-invalid={Boolean(invalidProject)}
-                role="combobox"
-              />
+            <div className="tabs" role="group" aria-label="Project mode">
               <button
                 type="button"
-                className="absolute inset-y-0 right-0 grid w-10 place-items-center text-[var(--ink-2)]"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => setProjectListOpen((current) => !current)}
-                aria-label="Toggle project options"
-                aria-expanded={projectListOpen}
-                tabIndex={-1}
+                className={`tab${projectMode === "existing" ? " on" : ""}`}
+                aria-pressed={projectMode === "existing"}
+                onClick={() => { setProjectMode("existing"); setProject(""); }}
               >
-                ▾
+                <span>Select existing</span>
               </button>
-              {projectListOpen && (
-                <div
-                  id="upload-project-options"
-                  className="panel stack absolute left-0 right-0 top-full z-20 mt-1 max-h-[240px] overflow-y-auto p-1"
-                  role="listbox"
-                >
-                  {projects.length === 0 ? (
-                    <div className="empty-state p-3" role="option" aria-disabled="true">
-                      No projects yet — type a new one
-                    </div>
-                  ) : filteredProjects.map((item) => (
-                    <button
-                      type="button"
-                      className="stack-item w-full cursor-pointer text-left"
-                      key={item.name}
-                      onClick={() => { setProject(item.name); setProjectListOpen(false); }}
-                      role="option"
-                      aria-selected={project === item.name}
-                    >
-                      <span className="stack-id">{item.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <button
+                type="button"
+                className={`tab${projectMode === "new" ? " on" : ""}`}
+                aria-pressed={projectMode === "new"}
+                onClick={() => { setProjectMode("new"); setProject(""); }}
+              >
+                <span>+ Create new</span>
+              </button>
             </div>
+            {projectMode === "existing" ? (
+              <select
+                id="upload-project"
+                className="input w-full"
+                value={project}
+                onChange={(event) => setProject(event.target.value)}
+                disabled={projects.length === 0}
+              >
+                {projects.length === 0 ? (
+                  <option value="">No projects yet</option>
+                ) : (
+                  <>
+                    <option value="" disabled>Select a project</option>
+                    {projects.map((item) => (
+                      <option key={item.name} value={item.name}>{item.name}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            ) : (
+              <input
+                id="upload-project"
+                className="input w-full min-w-[260px]"
+                value={project}
+                onChange={(event) => setProject(event.target.value)}
+                placeholder="Type a new project name"
+                aria-invalid={Boolean(invalidProject)}
+              />
+            )}
             {invalidProject && <div className="empty-state" style={{ fontStyle: "normal" }}>{invalidProject}</div>}
           </div>
           <div
