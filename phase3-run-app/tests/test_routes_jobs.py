@@ -227,3 +227,9 @@ def test_viewer_cannot_submit(client, valid_case):
     r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
     assert r.status_code == 403
     app.dependency_overrides.pop(rbac.current_account, None)
+
+
+def test_submit_requires_job_name(client, valid_case):
+    # job_name omitted -> 422 (Pydantic required field)
+    r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
+    assert r.status_code == 422

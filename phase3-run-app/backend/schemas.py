@@ -18,6 +18,7 @@ class SubmitReq(BaseModel):
     case_ids: list[str] = Field(min_length=1)
     machine_type: str
     spot: bool = False
+    job_name: str
 
 
 class SetUserReq(BaseModel):
