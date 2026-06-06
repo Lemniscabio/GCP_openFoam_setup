@@ -220,16 +220,16 @@ export function UploadView({
 
       {preflight !== null && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="upload-confirm-title">
-          <div className="panel w-full max-w-lg bg-white/90">
+          <div className="panel w-full max-w-lg max-h-[85vh] flex flex-col bg-white/90">
             <div className="panel-head">
               <div className="ph-text">
                 <div className="ph-title" id="upload-confirm-title">{preflight.length ? "Upload blocked" : "Confirm upload"}</div>
                 <div className="ph-sub">{preflight.length ? "Required files are missing." : `${cases.length} case(s) will upload to ${project.trim()}.`}</div>
               </div>
             </div>
-            <div className="panel-body">
+            <div className="panel-body min-h-0 flex flex-col">
               {preflight.length > 0 && (
-                <div className="stack">
+                <div className="stack max-h-[55vh] overflow-y-auto">
                   {preflight.map((report) => (
                     <div className="stack-item" key={report.name}>
                       <span className="stack-id">{report.name}</span>
