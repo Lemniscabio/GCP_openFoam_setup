@@ -24,6 +24,7 @@ class RunRecord:
     case_names: list[str]
     state: str = "SUBMITTED"
     finished_at: datetime.datetime | None = None
+    project: str = ""
 
 
 class RunRepository(Protocol):
@@ -116,6 +117,7 @@ class FirestoreRunRepository:
                 "case_names": record.case_names,
                 "state": record.state,
                 "finished_at": record.finished_at,
+                "project": record.project,
             }
         )
 
@@ -129,6 +131,7 @@ class FirestoreRunRepository:
                 "mpi_ranks": record.mpi_ranks, "spot": record.spot,
                 "case_ids": record.case_ids, "case_names": record.case_names,
                 "state": record.state, "finished_at": record.finished_at,
+                "project": record.project,
             })
             return True
         except AlreadyExists:
@@ -187,4 +190,5 @@ class FirestoreRunRepository:
             case_names=d.get("case_names", []),
             state=d.get("state", "SUBMITTED"),
             finished_at=d.get("finished_at"),
+            project=d.get("project", ""),
         )

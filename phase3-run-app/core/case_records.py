@@ -10,6 +10,7 @@ class CaseRecord:
     uploaded_by: str
     uploaded_at: datetime.datetime
     ready: bool = False
+    project: str = ""
 
 
 class CaseRecordRepository(Protocol):
@@ -61,6 +62,7 @@ class FirestoreCaseRecordRepository:
                 "uploaded_by": record.uploaded_by,
                 "uploaded_at": record.uploaded_at,
                 "ready": record.ready,
+                "project": record.project,
             },
             merge=True,
         )
@@ -74,6 +76,7 @@ class FirestoreCaseRecordRepository:
             case_id=d["case_id"], name=d.get("name", d["case_id"]),
             uploaded_by=d.get("uploaded_by", "unknown"),
             uploaded_at=d.get("uploaded_at"), ready=d.get("ready", False),
+            project=d.get("project", ""),
         )
 
     def names_for(self, case_ids: list[str]) -> list[str]:
