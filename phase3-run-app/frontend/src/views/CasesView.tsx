@@ -117,7 +117,7 @@ export function CasesView({
         <div className="panel-body">
           {err && <div className="empty-state">Error: {err}</div>}
           {!err && cases.length === 0 && !loading && <div className="empty-state">No cases yet — upload some.</div>}
-          <div className="stack">
+          <div className="stack max-h-[60vh] overflow-y-auto">
             {projects.map(([project, projectCases], projectIndex) => {
               const isOpen = expandedProjects.has(project);
               return (

@@ -177,7 +177,7 @@ export function UploadView({
           {/* @ts-expect-error webkitdirectory is non-standard */}
           <input ref={inputRef} type="file" webkitdirectory="" directory="" hidden onChange={(event) => onPicked(event.target.files)} />
           {cases.length > 0 && (
-            <div className="stack">
+            <div className="stack max-h-[40vh] overflow-y-auto">
               {cases.map((item, index) => (
                 <motion.div className="stack-item" key={item.sourceName} custom={index} variants={listVariants} initial="hidden" animate="visible">
                   <span className="stack-id">{item.sourceName}</span>
@@ -210,7 +210,7 @@ export function UploadView({
           </div>
         </div>
         <div className="panel-body" style={{ paddingBottom: 0 }}>
-          <div className="panel-foot" style={{ margin: "0 -22px", borderRadius: 0, flex: 1, maxHeight: "none" }}>
+          <div className="panel-foot" style={{ margin: "0 -22px", borderRadius: 0, flex: 1, maxHeight: "40vh", overflowY: "auto" }}>
             <div className="foot-code">
               {log.length === 0 ? <span className="foot-empty">Pick a folder to begin.</span> : log.map((line, i) => <div key={i}>{line}</div>)}
             </div>
