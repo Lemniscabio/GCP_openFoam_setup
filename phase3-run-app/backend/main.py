@@ -8,6 +8,7 @@ from backend.routes_cases import router as cases_router
 from backend.routes_internal import router as internal_router
 from backend.routes_jobs import router as jobs_router
 from backend.routes_me import router as me_router
+from backend.routes_results import router as results_router
 
 app = FastAPI(title="OpenFOAM Batch")
 app.include_router(cases_router, prefix="/api")
@@ -15,6 +16,7 @@ app.include_router(jobs_router, prefix="/api")
 app.include_router(me_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(internal_router)  # /internal/*: no /api prefix, before static mount
+app.include_router(results_router, prefix="/api")
 
 
 @app.get("/health")
