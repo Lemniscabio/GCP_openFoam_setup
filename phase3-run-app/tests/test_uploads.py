@@ -56,3 +56,30 @@ def test_object_path_includes_project():
     assert case_prefix("turbine", "case_0001") == "cases/turbine/case_0001/"
     assert object_path("turbine", "case_0001", "system/controlDict") == \
         "cases/turbine/case_0001/case/system/controlDict"
+
+
+def test_get_url_signs_a_GET():
+    class _Blob:
+        def __init__(self):
+            self.kw = None
+
+        def generate_signed_url(self, **kw):
+            self.kw = kw
+            return "https://signed-get"
+
+    class _Bucket:
+        def __init__(self):
+            self.b = _Blob()
+
+        def blob(self, _path):
+            return self.b
+
+    bkt = _Bucket()
+    svc = SignedUrlService(bkt, "sa@x.iam.gserviceaccount.com", lambda: "tok")
+    url = svc.get_url(
+        "results/turbine/phoenix/case_0006/result.tar.gz",
+        datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+    )
+    assert url == "https://signed-get"
+    assert bkt.b.kw["method"] == "GET"
+    assert bkt.b.kw["version"] == "v4"

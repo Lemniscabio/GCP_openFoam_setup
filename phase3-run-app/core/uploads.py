@@ -53,6 +53,15 @@ class SignedUrlService:
         )
         return SignedUpload(object_path=obj_path, url=url)
 
+    def get_url(self, obj_path: str, now: datetime.datetime) -> str:
+        return self._bucket.blob(obj_path).generate_signed_url(
+            version="v4",
+            expiration=now + self._ttl,
+            method="GET",
+            service_account_email=self._signer_email,
+            access_token=self._token(),
+        )
+
     def put_urls_for_case(
         self,
         project: str,
