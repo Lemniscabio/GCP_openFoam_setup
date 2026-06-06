@@ -47,8 +47,10 @@ function projectError(project: string) {
 
 export function UploadView({
   onUploaded,
+  canUpload = true,
 }: {
   onUploaded: (project: string, ids: string[]) => void;
+  canUpload?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
@@ -192,8 +194,8 @@ export function UploadView({
             </div>
           )}
           <div className="row-end">
-            <Button disabled={Boolean(invalidProject) || !cases.length || busy} onClick={openPreflight}>
-              {busy ? `Uploading… ${pct}%` : `Upload ${cases.length || ""} case(s)`}
+            <Button disabled={!canUpload || Boolean(invalidProject) || !cases.length || busy} onClick={openPreflight}>
+              {!canUpload ? "Read-only" : busy ? `Uploading… ${pct}%` : `Upload ${cases.length || ""} case(s)`}
             </Button>
           </div>
         </div>

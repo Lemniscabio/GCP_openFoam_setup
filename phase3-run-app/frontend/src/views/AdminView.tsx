@@ -63,9 +63,9 @@ export function AdminView() {
     >
       <div className="panel">
         <div className="panel-head">
-          <div className="ph-num">05</div>
+          <div className="ph-num">U</div>
           <div className="ph-text">
-            <div className="ph-title">Admin</div>
+            <div className="ph-title">Users</div>
             <div className="ph-sub">{loading ? "loading users..." : `${users.length} account(s)`}</div>
           </div>
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>Refresh</Button>

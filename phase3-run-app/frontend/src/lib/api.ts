@@ -115,6 +115,9 @@ export class ApiClient {
   getMyRuns(): Promise<{ runs: RunRecord[] }> {
     return this.req("GET", "/api/me/runs");
   }
+  getAdminRuns(user?: string): Promise<{ runs: RunRecord[] }> {
+    return this.req("GET", `/api/admin/runs${user ? `?user=${encodeURIComponent(user)}` : ""}`);
+  }
   getCaseMetadata(project: string, caseId: string): Promise<{ metadata: unknown }> {
     const query = new URLSearchParams({ project });
     return this.req("GET", `/api/cases/${caseId}/metadata?${query}`);

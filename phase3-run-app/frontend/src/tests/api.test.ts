@@ -72,6 +72,7 @@ describe("ApiClient", () => {
     await api.getResultFiles("turbine", "phoenix", "case_0006");
     await api.postDownloads(["results/turbine/phoenix/case_0006/result.tar.gz"]);
     await api.getMyRuns();
+    await api.getAdminRuns("runner@lemnisca.bio");
     await api.getCaseMetadata("turbine", "case_0006");
     const find = (fragment: string) => calls.find((call) => call.url.includes(fragment));
     expect(JSON.parse(String(find(":allocate")?.body)).project).toBe("turbine");
@@ -80,6 +81,7 @@ describe("ApiClient", () => {
     expect(find("/api/results/files")?.url).toContain("project=turbine");
     expect(find("/api/results/downloads")?.method).toBe("POST");
     expect(find("/api/me/runs")?.method).toBe("GET");
+    expect(find("/api/admin/runs")?.url).toContain("user=runner%40lemnisca.bio");
     expect(find("/metadata")?.url).toContain("project=turbine");
   });
 });

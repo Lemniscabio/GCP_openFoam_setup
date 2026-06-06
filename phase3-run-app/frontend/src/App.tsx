@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppShell, type Tab } from "./components/AppShell";
 import { tokenStore } from "./lib/auth";
@@ -9,24 +9,7 @@ import { CasesView } from "./views/CasesView";
 import { SubmitView } from "./views/SubmitView";
 import { RunsView } from "./views/RunsView";
 import { ResultsView } from "./views/ResultsView";
-
-const UploadSection = UploadView as ComponentType<{
-  onUploaded: (project: string, ids: string[]) => void;
-}>;
-const CasesSection = CasesView as unknown as ComponentType<{
-  activeProject: string | null;
-  selectedCaseIds: string[];
-  onChange: (ids: string[]) => void;
-  onActiveProject: (project: string) => void;
-  onSubmit: () => void;
-  canRun: boolean;
-}>;
-const SubmitSection = SubmitView as ComponentType<{
-  project: string | null;
-  caseIds: string[];
-  canSubmit: boolean;
-  onSubmitted: () => void;
-}>;
+import { ProfileView } from "./views/ProfileView";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
@@ -86,18 +69,18 @@ export default function App() {
           style={{ display: "contents" }}
         >
           {view === "profile" ? (
-            <Placeholder title="Profile" onBack={() => setView("section")} />
+            <ProfileView me={me} onBack={() => setView("section")} />
           ) : (
             <>
           {tab === "upload" && (
-            <UploadSection onUploaded={(project, ids) => {
+            <UploadView canUpload={canRun} onUploaded={(project, ids) => {
               setActiveProject(project);
               setSelectedCaseIds(ids);
               setTab("cases");
             }} />
           )}
           {tab === "cases" && (
-            <CasesSection
+            <CasesView
               activeProject={activeProject}
               selectedCaseIds={selectedCaseIds}
               canRun={canRun}
@@ -107,7 +90,7 @@ export default function App() {
             />
           )}
           {tab === "submit" && (
-            <SubmitSection
+            <SubmitView
               project={activeProject}
               caseIds={selectedCaseIds}
               canSubmit={canRun}
@@ -121,20 +104,6 @@ export default function App() {
         </motion.div>
       </AnimatePresence>
     </AppShell>
-  );
-}
-
-function Placeholder({ title, onBack }: { title: string; onBack?: () => void }) {
-  return (
-    <div className="step" style={{ gridTemplateColumns: "1fr" }}>
-      <div className="panel">
-        <div className="panel-head">
-          <div className="ph-text"><div className="ph-title">{title}</div></div>
-          {onBack && <button className="btn-add" onClick={onBack}>Back</button>}
-        </div>
-        <div className="panel-body"><div className="empty-state">Loading section…</div></div>
-      </div>
-    </div>
   );
 }
 
