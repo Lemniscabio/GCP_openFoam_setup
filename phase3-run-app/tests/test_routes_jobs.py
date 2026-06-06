@@ -82,11 +82,15 @@ def test_submit_single():
 
     r = client.post(
         "/api/jobs",
-        json={"case_ids": ["case_0001"], "machine_type": "c2d-highcpu-2"},
+        json={
+            "case_ids": ["case_0001"],
+            "machine_type": "c2d-highcpu-2",
+            "job_name": "phoenix",
+        },
     )
 
     assert r.status_code == 200
-    assert "of-case-0001-c2d-highcpu-2-" in r.json()["job_name"]
+    assert r.json()["job_name"] == "phoenix"
 
 
 def test_submit_multi():
@@ -98,11 +102,12 @@ def test_submit_multi():
         json={
             "case_ids": ["case_0001", "case_0002"],
             "machine_type": "c2d-highcpu-2",
+            "job_name": "otter",
         },
     )
 
     assert r.status_code == 200
-    assert r.json()["job_name"].startswith("of-multi-")
+    assert r.json()["job_name"] == "otter"
 
 
 def test_submit_rejects_unvalidated_case():
@@ -111,7 +116,11 @@ def test_submit_rejects_unvalidated_case():
 
     r = client.post(
         "/api/jobs",
-        json={"case_ids": ["case_0099"], "machine_type": "c2d-highcpu-2"},
+        json={
+            "case_ids": ["case_0099"],
+            "machine_type": "c2d-highcpu-2",
+            "job_name": "raven",
+        },
     )
 
     assert r.status_code == 400
@@ -122,7 +131,11 @@ def test_submit_rejects_unvalidated_case():
 def test_unknown_machine_400():
     r = client.post(
         "/api/jobs",
-        json={"case_ids": ["case_0001"], "machine_type": "n2-standard-4"},
+        json={
+            "case_ids": ["case_0001"],
+            "machine_type": "n2-standard-4",
+            "job_name": "falcon",
+        },
     )
 
     assert r.status_code == 400
@@ -165,7 +178,8 @@ def test_run_detail():
 
 def test_submit_writes_run_record(client, valid_case, mem_runs, mem_case_records):
     mem_case_records.upsert_name("case_0006", "Wind Tunnel v3")
-    r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
+    r = client.post("/api/jobs", json={
+        "case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "ember"})
     assert r.status_code == 200
     batch_job_id = r.json()["batch_job_id"]
     rec = mem_runs.get(batch_job_id)
@@ -224,7 +238,8 @@ def test_viewer_cannot_submit(client, valid_case):
         User(email="v@lemnisca.bio", sub="v"),
         UserRecord(email="v@lemnisca.bio", role="viewer", status="active", requested_at=now),
     )
-    r = client.post("/api/jobs", json={"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8"})
+    r = client.post("/api/jobs", json={
+        "case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "frost"})
     assert r.status_code == 403
     app.dependency_overrides.pop(rbac.current_account, None)
 
@@ -248,3 +263,32 @@ def test_suggest_job_name_returns_unused_valid(client, mem_runs):
     assert r.status_code == 200
     name = r.json()["name"]
     assert is_valid_codename(name) and name != "phoenix"
+
+
+def test_submit_uses_codename_as_id_and_folder(client, valid_case, mem_runs):
+    r = client.post("/api/jobs", json={
+        "case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "phoenix"})
+    assert r.status_code == 200
+    assert r.json()["batch_job_id"] == "phoenix"
+    rec = mem_runs.get("phoenix")
+    assert rec is not None and rec.job_name == "phoenix"
+
+
+def test_submit_rejects_invalid_job_name(client, valid_case):
+    r = client.post("/api/jobs", json={
+        "case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "Bad Name!"})
+    assert r.status_code == 400
+
+
+def test_submit_rejects_taken_job_name(client, valid_case, mem_runs):
+    body = {"case_ids": ["case_0006"], "machine_type": "c2d-highcpu-8", "job_name": "phoenix"}
+    assert client.post("/api/jobs", json=body).status_code == 200
+    assert client.post("/api/jobs", json=body).status_code == 400  # taken
+
+
+def test_submit_dedupes_case_ids(client, valid_case, mem_runs):
+    r = client.post("/api/jobs", json={
+        "case_ids": ["case_0006", "case_0006"], "machine_type": "c2d-highcpu-8",
+        "job_name": "otter"})
+    assert r.status_code == 200
+    assert mem_runs.get("otter").case_ids == ["case_0006"]
