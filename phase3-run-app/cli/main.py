@@ -6,15 +6,12 @@ import click
 
 from core.batch_jobs import BatchJobBuilder, BatchSubmitter
 from core.cases import CaseRepository
+from core.codenames import is_valid_codename, suggest_unused
 from core.config import Settings
 from core.machines import MachineCatalog
-from core.naming import build_job_name, canonical_case_id
+from core.naming import canonical_case_id
 from core.storage import GcsStorage
 from core.validation import validate_case
-
-
-def _now_ts() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
 
 
 @click.group()
@@ -75,13 +72,17 @@ def upload(settings: Settings, case_dir, command_sh, case_id, openfoam_version):
 @click.option("--case", "cases", multiple=True, required=True, help="case id (repeatable)")
 @click.option("--machine", required=True)
 @click.option("--spot/--standard", default=False)
+@click.option("--job-name", default=None, help="one-word codename (auto if omitted)")
 @click.pass_obj
-def run(settings: Settings, cases, machine, spot):
+def run(settings: Settings, cases, machine, spot, job_name):
     """Submit a single-task (1 case) or multi-task (N cases) Batch job."""
     spec_machine = MachineCatalog().get(machine)
     prov = "SPOT" if spot else "STANDARD"
-    ts = _now_ts()
     ids = [canonical_case_id(c) for c in cases]
+    job_name = (job_name or suggest_unused(set())).strip().lower()
+    if not is_valid_codename(job_name):
+        click.echo(f"invalid --job-name {job_name!r}", err=True)
+        raise SystemExit(2)
     storage = GcsStorage(settings.bucket)
     errors = {}
     for case_id in ids:
@@ -100,10 +101,8 @@ def run(settings: Settings, cases, machine, spot):
                   mpi_ranks=spec_machine["default_mpi_ranks"], provisioning_model=prov,
                   local_ssd_count=spec_machine["local_ssd_count"])
     if len(ids) == 1:
-        job_name = build_job_name(ids[0], machine, ts)
         spec = builder.build_single(case_id=ids[0], machine_type=machine, job_name=job_name, **common)
     else:
-        job_name = build_job_name(None, machine, ts, multi=True)
         spec = builder.build_multi(case_ids=ids, machine_type=machine, job_name=job_name, **common)
     name = submitter.submit(job_name, spec)
     click.echo(f"Submitted {name}")

@@ -14,9 +14,3 @@ def sanitize_job_part(value: str) -> str:
 
 def variant_for_machine(machine_type: str) -> str:
     return sanitize_job_part(machine_type)
-
-def build_job_name(case_id: str | None, machine_type: str, ts: str, multi: bool = False) -> str:
-    machine = sanitize_job_part(machine_type)
-    if multi:
-        return f"of-multi-{machine}-{ts}"
-    return f"of-{sanitize_job_part(case_id)}-{machine}-{ts}"

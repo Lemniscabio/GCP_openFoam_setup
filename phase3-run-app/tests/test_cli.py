@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 
 from cli import main
+from core.codenames import is_valid_codename
 from core.storage import InMemoryStorage
 
 
@@ -26,3 +27,41 @@ def test_run_rejects_invalid_case_before_submit(monkeypatch):
 
     assert result.exit_code == 1
     assert "FAIL case_0001" in result.stderr
+
+
+def test_run_auto_suggests_or_uses_job_name(monkeypatch):
+    store = InMemoryStorage()
+    store.upload_bytes("cases/case_0001/case/system/controlDict", b"x")
+    store.upload_bytes("cases/case_0001/case/command.sh", b"foamRun")
+    store.upload_bytes("cases/case_0001/manifest.json", b'{}')
+    store.upload_bytes("cases/case_0001/READY", b"ready")
+    submitted = []
+
+    class _CapturingSubmitter:
+        def __init__(self, project_id, region):
+            pass
+
+        def submit(self, job_name, spec):
+            submitted.append(job_name)
+            return job_name
+
+    monkeypatch.setattr(main, "GcsStorage", lambda bucket: store)
+    monkeypatch.setattr(main, "BatchSubmitter", _CapturingSubmitter)
+    runner = CliRunner()
+
+    automatic = runner.invoke(
+        main.cli,
+        ["run", "--case", "case_0001", "--machine", "c2d-highcpu-2"],
+    )
+    explicit = runner.invoke(
+        main.cli,
+        [
+            "run", "--case", "case_0001", "--machine", "c2d-highcpu-2",
+            "--job-name", "foo",
+        ],
+    )
+
+    assert automatic.exit_code == 0
+    assert explicit.exit_code == 0
+    assert is_valid_codename(submitted[0])
+    assert submitted[1] == "foo"

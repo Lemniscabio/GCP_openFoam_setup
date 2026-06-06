@@ -58,3 +58,17 @@ def test_update_state_is_monotonic_never_regresses_terminal():
 
 def test_get_missing_returns_none():
     assert InMemoryRunRepository().get("nope") is None
+
+
+def test_try_reserve_is_exclusive():
+    repo = InMemoryRunRepository()
+    assert repo.try_reserve(_rec(job_id="phoenix")) is True
+    # second reservation of the same id fails
+    assert repo.try_reserve(_rec(job_id="phoenix")) is False
+
+
+def test_existing_ids():
+    repo = InMemoryRunRepository()
+    repo.try_reserve(_rec(job_id="phoenix"))
+    repo.try_reserve(_rec(job_id="otter"))
+    assert repo.existing_ids() == {"phoenix", "otter"}

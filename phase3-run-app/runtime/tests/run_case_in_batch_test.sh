@@ -174,10 +174,13 @@ if [[ ! -f "${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz" ]]; then
   printf '  FAIL [%s] result.tar.gz was not produced\n' "${TEST_NAME}" >&2
   TEST_FAILURES=$((TEST_FAILURES+1))
 fi
+gcloud_calls="$(cat "${GCLOUD_LOG}")"
 assert_contains \
-  "gcloud storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz gs://tb/results/case_0001/fixed/of-x/task_0/result.tar.gz" \
-  "$(cat "${GCLOUD_LOG}")" \
-  "result tarball copied to result prefix"
+  "gcloud storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/result.tar.gz gs://tb/results/singlecase/of-x/case_0001/result.tar.gz" \
+  "${gcloud_calls}" \
+  "result tarball copied to single-case result prefix"
+assert_not_contains "/task_" "${gcloud_calls}" "result path omits task segment"
+assert_not_contains "/results/case_0001/fixed/" "${gcloud_calls}" "result path omits variant segment"
 teardown_tmp_workspace
 
 start_test "checkpoint restore failure aborts before solver"
@@ -225,7 +228,7 @@ assert_eq "7" "$(cat "${SCRATCH_ROOT_TEST}/case_0001/stage/exit_code.txt")" "exi
 assert_contains "solver-start" "$(cat "${TMPDIR_TEST}/stdout")" "solver output streamed to stdout"
 assert_contains "solver-start" "$(cat "${SCRATCH_ROOT_TEST}/case_0001/stage/solver.stdout.log")" "solver output written to log"
 gcloud_calls="$(cat "${GCLOUD_LOG}")"
-assert_contains "storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/_FAILED gs://tb/results/case_0001/fixed/of-x/task_0/_FAILED" "${gcloud_calls}" "_FAILED copied"
+assert_contains "storage cp ${SCRATCH_ROOT_TEST}/case_0001/stage/_FAILED gs://tb/results/singlecase/of-x/case_0001/_FAILED" "${gcloud_calls}" "_FAILED copied"
 assert_not_contains "_SUCCESS" "${gcloud_calls}" "_SUCCESS not copied"
 assert_not_contains "storage rm -r gs://tb/checkpoints/case_0001/fixed/latest/" "${gcloud_calls}" "checkpoint not deleted on failure"
 teardown_tmp_workspace

@@ -49,8 +49,11 @@ export class ApiClient {
   listCases(): Promise<{ cases: CaseInfo[] }> {
     return this.req("GET", "/api/cases");
   }
-  submit(case_ids: string[], machine_type: string, spot: boolean) {
-    return this.req("POST", "/api/jobs", { case_ids, machine_type, spot });
+  submit(case_ids: string[], machine_type: string, spot: boolean, job_name: string) {
+    return this.req("POST", "/api/jobs", { case_ids, machine_type, spot, job_name });
+  }
+  suggestJobName() {
+    return this.req("GET", "/api/job-name/suggest");
   }
   listRuns(): Promise<{ runs: RunSummary[] }> {
     return this.req("GET", "/api/jobs");

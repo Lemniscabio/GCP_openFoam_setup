@@ -22,8 +22,8 @@ SCRATCH_ROOT="${SCRATCH_ROOT:-/mnt/disks/openfoam-scratch}"
 [[ -d "${SCRATCH_ROOT}" ]] || { echo "SCRATCH_ROOT=${SCRATCH_ROOT} missing" >&2; exit 64; }
 
 CASE_PREFIX="gs://${BUCKET}/cases/${CASE_ID}"
-TASK_INDEX="${BATCH_TASK_INDEX:-0}"
-RESULT_PREFIX="gs://${BUCKET}/results/${CASE_ID}/${VARIANT_ID}/${JOB_NAME}/task_${TASK_INDEX}"
+RESULT_MODE=$([[ -n "${CASE_ID_LIST:-}" ]] && echo multicase || echo singlecase)
+RESULT_PREFIX="gs://${BUCKET}/results/${RESULT_MODE}/${JOB_NAME}/${CASE_ID}"
 CHECKPOINT_PREFIX="gs://${BUCKET}/checkpoints/${CASE_ID}/${VARIANT_ID}/latest"
 WORK_DIR="${SCRATCH_ROOT}/${CASE_ID}"; STAGE_DIR="${WORK_DIR}/stage"; CASE_DIR="${WORK_DIR}/case"
 mkdir -p "${STAGE_DIR}" "${CASE_DIR}"

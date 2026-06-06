@@ -28,6 +28,11 @@ class RunRecord:
 
 class RunRepository(Protocol):
     def create(self, record: RunRecord) -> None: ...
+    def try_reserve(self, record: "RunRecord") -> bool:
+        """Atomically create the record only if its batch_job_id is unused.
+        Returns True if reserved, False if the id already exists."""
+        ...
+    def existing_ids(self) -> set[str]: ...
     def get(self, batch_job_id: str) -> RunRecord | None: ...
     def list_recent(self, limit: int = 50) -> list[RunRecord]: ...
     def update_state(
@@ -48,6 +53,15 @@ class InMemoryRunRepository:
 
     def create(self, record: RunRecord) -> None:
         self._runs[record.batch_job_id] = record
+
+    def try_reserve(self, record):
+        if record.batch_job_id in self._runs:
+            return False
+        self._runs[record.batch_job_id] = record
+        return True
+
+    def existing_ids(self):
+        return set(self._runs.keys())
 
     def get(self, batch_job_id: str) -> RunRecord | None:
         return self._runs.get(batch_job_id)
@@ -104,6 +118,24 @@ class FirestoreRunRepository:
                 "finished_at": record.finished_at,
             }
         )
+
+    def try_reserve(self, record):
+        from google.api_core.exceptions import AlreadyExists
+        try:
+            self._doc(record.batch_job_id).create({
+                "batch_job_id": record.batch_job_id, "job_name": record.job_name,
+                "submitted_by": record.submitted_by, "submitted_at": record.submitted_at,
+                "region": record.region, "machine_type": record.machine_type,
+                "mpi_ranks": record.mpi_ranks, "spot": record.spot,
+                "case_ids": record.case_ids, "case_names": record.case_names,
+                "state": record.state, "finished_at": record.finished_at,
+            })
+            return True
+        except AlreadyExists:
+            return False
+
+    def existing_ids(self):
+        return {d.id for d in self._c.collection(self._col).select([]).stream()}
 
     def get(self, batch_job_id: str) -> RunRecord | None:
         snap = self._doc(batch_job_id).get()
