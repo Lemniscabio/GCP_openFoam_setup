@@ -9,7 +9,7 @@ env:
   REGION: us-central1
   SERVICE: of-batch-app
   IMAGE: us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/of-backend
-  RUNTIME_IMAGE: us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.3
+  RUNTIME_IMAGE: us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.4
   BACKEND_SA: of-batch-backend@cfd-lemnisca.iam.gserviceaccount.com
   ALLOWED_DOMAIN: lemnisca.bio
 
