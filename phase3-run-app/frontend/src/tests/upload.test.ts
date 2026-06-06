@@ -42,7 +42,7 @@ describe("runPool", () => {
     );
     const api = new ApiClient("", () => null, fetchMock as unknown as typeof fetch);
 
-    await api.finalize("case_0006", { name: "Wind Tunnel v3", openfoam_version: "12" });
+    await api.finalize("case_0006", { name: "Wind Tunnel v3", openfoam_version: "12", project: "turbine" });
 
     const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect(JSON.parse(init.body as string).name).toBe("Wind Tunnel v3");
