@@ -9,7 +9,7 @@ class StorageClient(Protocol):
     def upload_bytes(self, path: str, data: bytes) -> None: ...
     def read_text(self, path: str) -> str: ...
     def list_case_ids(self) -> list[str]:
-        """Return every case id that has any object under cases/<id>/."""
+        """Return every case id that has an object under cases/<project>/<id>/."""
         ...
 
 class InMemoryStorage:
@@ -38,10 +38,9 @@ class InMemoryStorage:
     def list_case_ids(self) -> list[str]:
         ids = set()
         for path in self._objs:
-            if path.startswith("cases/"):
-                parts = path.split("/")
-                if len(parts) >= 3 and parts[1]:
-                    ids.add(parts[1])
+            parts = path.split("/")
+            if len(parts) >= 4 and parts[0] == "cases" and parts[1] and parts[2]:
+                ids.add(parts[2])
         return sorted(ids)
 
 from google.cloud import storage as _gcs  # type: ignore
@@ -79,6 +78,6 @@ class GcsStorage:
         ids = set()
         for name in self.list_paths("cases/"):
             parts = name.split("/")
-            if len(parts) >= 3 and parts[1]:
-                ids.add(parts[1])
+            if len(parts) >= 4 and parts[0] == "cases" and parts[1] and parts[2]:
+                ids.add(parts[2])
         return sorted(ids)

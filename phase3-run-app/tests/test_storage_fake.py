@@ -13,10 +13,18 @@ def test_object_exists():
 
 def test_list_case_ids_from_prefixes():
     s = InMemoryStorage()
-    s.upload_bytes("cases/case_0001/READY", b"")
-    s.upload_bytes("cases/case_0003/case/system/controlDict", b"")
+    s.upload_bytes("cases/turbine/case_0001/READY", b"")
+    s.upload_bytes("cases/wing/case_0003/case/system/controlDict", b"")
     s.upload_bytes("results/case_0002/x", b"")  # not a case prefix
     assert sorted(s.list_case_ids()) == ["case_0001", "case_0003"]
+
+
+def test_list_case_ids_parses_project_depth():
+    s = InMemoryStorage()
+    s.upload_bytes("cases/turbine/case_0001/case/x", b"")
+    s.upload_bytes("cases/wing/case_0002/READY", b"")
+    s.upload_bytes("results/turbine/jobx/case_0001/r", b"")
+    assert sorted(s.list_case_ids()) == ["case_0001", "case_0002"]
 
 def test_list_paths_returns_matching_prefixes():
     s = InMemoryStorage()
