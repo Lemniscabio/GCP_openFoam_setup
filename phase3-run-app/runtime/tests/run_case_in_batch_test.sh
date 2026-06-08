@@ -4,6 +4,27 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/test_helpers.sh"
 
 SCRIPT_UNDER_TEST="${REPO_ROOT}/phase3-run-app/runtime/run_case_in_batch.sh"
 
+extract_resume_function() {
+  awk '/^resume_from_checkpoint\(\)/{emit=1} emit && /^resume_from_checkpoint$/{emit=0; next} /^CHECKPOINT_POLL_SEC=/{emit=0} emit {print}' \
+    "${SCRIPT_UNDER_TEST}" > "${TMPDIR_TEST}/resume_function.sh"
+}
+
+install_foamdict_probe() {
+  mkdir -p "${TMPDIR_TEST}/bin"
+  cat > "${TMPDIR_TEST}/bin/foamDictionary" <<'STUB'
+#!/usr/bin/env bash
+set -u
+: "${FOAMDICT_LOG:?FOAMDICT_LOG must be set}"
+printf '%s\n' "PWD=${PWD} foamDictionary $*" >> "${FOAMDICT_LOG}"
+if [[ "${FOAMDICT_FAIL:-0}" == "1" ]]; then
+  exit 1
+fi
+exit 0
+STUB
+  chmod +x "${TMPDIR_TEST}/bin/foamDictionary"
+  export PATH="${TMPDIR_TEST}/bin:${PATH}"
+}
+
 start_test "runtime aborts when SCRATCH_ROOT does not exist"
 setup_tmp_workspace
 SCRATCH_ROOT="${TMPDIR_TEST}/does-not-exist" \
@@ -32,6 +53,92 @@ teardown_tmp_workspace
 
 start_test "runtime does not reference SHA256SUMS"
 assert_not_contains "SHA256SUMS" "$(cat "${SCRIPT_UNDER_TEST}")"
+
+start_test "resume with decomposed mesh exports OF_RESUME and edits startFrom"
+setup_tmp_workspace
+install_foamdict_probe
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+mkdir -p "${CASE_DIR}/processor0/constant/polyMesh" "${CASE_DIR}/system"
+export CASE_DIR CHECKPOINT_PREFIX
+export GCLOUD_LS_HITS="${CHECKPOINT_PREFIX}/"
+
+extract_resume_function
+source "${TMPDIR_TEST}/resume_function.sh"
+resume_from_checkpoint >"${TMPDIR_TEST}/resume.out" 2>"${TMPDIR_TEST}/resume.err"
+rc=$?
+
+assert_eq "0" "${rc}" "resume block succeeds"
+assert_eq "1" "${OF_RESUME}" "OF_RESUME exported for restored decomposed checkpoint"
+assert_contains "Resuming from ${CHECKPOINT_PREFIX}" "$(cat "${TMPDIR_TEST}/resume.out")" "resume log emitted"
+assert_contains "rsync --recursive ${CHECKPOINT_PREFIX}/ ${CASE_DIR}/" "$(cat "${GCLOUD_LOG}")" "checkpoint restored"
+foamdict_calls="$(cat "${FOAMDICT_LOG}")"
+assert_contains "PWD=${CASE_DIR} foamDictionary system/controlDict -entry startFrom -set latestTime" "${foamdict_calls}" "startFrom edited from case cwd"
+unset CASE_DIR CHECKPOINT_PREFIX GCLOUD_LS_HITS OF_RESUME
+teardown_tmp_workspace
+
+start_test "resume without decomposed mesh falls back to fresh run"
+setup_tmp_workspace
+install_foamdict_probe
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+mkdir -p "${CASE_DIR}/system"
+export CASE_DIR CHECKPOINT_PREFIX
+export GCLOUD_LS_HITS="${CHECKPOINT_PREFIX}/"
+
+extract_resume_function
+source "${TMPDIR_TEST}/resume_function.sh"
+resume_from_checkpoint >"${TMPDIR_TEST}/resume.out" 2>"${TMPDIR_TEST}/resume.err"
+rc=$?
+
+assert_eq "0" "${rc}" "partial checkpoint is non-fatal"
+assert_eq "0" "${OF_RESUME}" "OF_RESUME remains fresh-run value"
+assert_eq "" "$(cat "${FOAMDICT_LOG}")" "foamDictionary not called without decomposed mesh"
+assert_contains "checkpoint present but no decomposed mesh" "$(cat "${TMPDIR_TEST}/resume.err")" "partial checkpoint warning emitted"
+unset CASE_DIR CHECKPOINT_PREFIX GCLOUD_LS_HITS OF_RESUME
+teardown_tmp_workspace
+
+start_test "foamDictionary failure on resume exits 70"
+setup_tmp_workspace
+install_foamdict_probe
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+mkdir -p "${CASE_DIR}/processor0/constant/polyMesh" "${CASE_DIR}/system"
+export CASE_DIR CHECKPOINT_PREFIX
+export GCLOUD_LS_HITS="${CHECKPOINT_PREFIX}/"
+export FOAMDICT_FAIL=1
+
+extract_resume_function
+source "${TMPDIR_TEST}/resume_function.sh"
+( resume_from_checkpoint ) >"${TMPDIR_TEST}/resume.out" 2>"${TMPDIR_TEST}/resume.err"
+rc=$?
+
+assert_eq "70" "${rc}" "foamDictionary failure is fatal"
+assert_contains "startFrom latestTime" "$(cat "${TMPDIR_TEST}/resume.err")" "fatal stderr names startFrom latestTime"
+assert_contains "foamDictionary system/controlDict -entry startFrom -set latestTime" "$(cat "${FOAMDICT_LOG}")" "foamDictionary was attempted"
+unset CASE_DIR CHECKPOINT_PREFIX GCLOUD_LS_HITS OF_RESUME FOAMDICT_FAIL
+teardown_tmp_workspace
+
+start_test "no checkpoint keeps fresh-run resume state"
+setup_tmp_workspace
+install_foamdict_probe
+CASE_DIR="${TMPDIR_TEST}/scratch/case_0001/case"
+CHECKPOINT_PREFIX="gs://tb/checkpoints/case_0001/fixed/latest"
+mkdir -p "${CASE_DIR}/system"
+export CASE_DIR CHECKPOINT_PREFIX
+
+extract_resume_function
+source "${TMPDIR_TEST}/resume_function.sh"
+resume_from_checkpoint >"${TMPDIR_TEST}/resume.out" 2>"${TMPDIR_TEST}/resume.err"
+rc=$?
+
+assert_eq "0" "${rc}" "missing checkpoint is non-fatal"
+assert_eq "0" "${OF_RESUME}" "OF_RESUME remains fresh-run value"
+assert_contains "gcloud storage ls ${CHECKPOINT_PREFIX}/" "$(cat "${GCLOUD_LOG}")" "checkpoint existence checked"
+assert_not_contains "rsync --recursive ${CHECKPOINT_PREFIX}/ ${CASE_DIR}/" "$(cat "${GCLOUD_LOG}")" "checkpoint not restored"
+assert_eq "" "$(cat "${FOAMDICT_LOG}")" "foamDictionary not called without checkpoint"
+unset CASE_DIR CHECKPOINT_PREFIX OF_RESUME
+teardown_tmp_workspace
 
 start_test "checkpoint rsync uses concrete processor directories"
 setup_tmp_workspace

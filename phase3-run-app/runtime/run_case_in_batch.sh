@@ -34,13 +34,33 @@ gcloud storage rsync --recursive "${CASE_PREFIX}/case/" "${CASE_DIR}/"   # tree 
 gcloud storage cp "${CASE_PREFIX}/manifest.json" "${STAGE_DIR}/manifest.json"
 chmod +x "${CASE_DIR}/command.sh"   # command.sh comes down inside the case tree
 
-# resume from checkpoint if present
-if gcloud storage ls "${CHECKPOINT_PREFIX}/" >/dev/null 2>&1; then
-  echo "Resuming from ${CHECKPOINT_PREFIX}"
-  gcloud storage rsync --recursive "${CHECKPOINT_PREFIX}/" "${CASE_DIR}/"
-  command -v foamDictionary >/dev/null 2>&1 && \
-    foamDictionary "${CASE_DIR}/system/controlDict" -entry startFrom -set latestTime || true
-fi
+resume_from_checkpoint() {
+  OF_RESUME=0
+  export OF_RESUME
+
+  if gcloud storage ls "${CHECKPOINT_PREFIX}/" >/dev/null 2>&1; then
+    echo "Resuming from ${CHECKPOINT_PREFIX}"
+    gcloud storage rsync --recursive "${CHECKPOINT_PREFIX}/" "${CASE_DIR}/"
+
+    if [[ -d "${CASE_DIR}/processor0/constant/polyMesh" ]]; then
+      OF_RESUME=1
+      export OF_RESUME
+
+      if ! command -v foamDictionary >/dev/null 2>&1; then
+        echo "foamDictionary is required to set startFrom latestTime on resume" >&2
+        exit 70
+      fi
+      if ! ( cd "${CASE_DIR}" && foamDictionary system/controlDict -entry startFrom -set latestTime ); then
+        echo "Failed to set startFrom latestTime in system/controlDict on resume" >&2
+        exit 70
+      fi
+    else
+      echo "WARNING: checkpoint present but no decomposed mesh; treating as fresh run" >&2
+    fi
+  fi
+}
+
+resume_from_checkpoint
 
 CHECKPOINT_POLL_SEC="${CHECKPOINT_POLL_SEC:-30}"
 CHECKPOINT_SYNC_FAILURES=0
