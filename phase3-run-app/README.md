@@ -69,6 +69,22 @@ foam_runs/
 
 `command.sh` must live **inside** the case folder. The runtime rsyncs the whole tree and runs it. It should contain only solver logic — no GCS download/upload, no `mpirun` argument construction (the runtime injects `MPI_RANKS`).
 
+### Resume contract for `command.sh`
+
+On a resume, the runtime restores the decomposed checkpoint and exports `OF_RESUME=1`. A resume-aware `command.sh` MUST skip all mesh generation and `decomposePar` when `OF_RESUME=1`, and always run the solver (`foamRun`) plus `reconstructPar`. Gate it like:
+
+```bash
+if [[ "${OF_RESUME:-0}" != "1" ]]; then
+  blockMesh; snappyHexMesh -overwrite; topoSet; createPatch -overwrite
+  foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "${MPI_RANKS}"
+  decomposePar -force
+fi
+mpirun --oversubscribe -np "${MPI_RANKS}" foamRun -parallel
+reconstructPar -latestTime
+```
+
+A `command.sh` that re-meshes or runs `decomposePar -force` unconditionally will wipe the restored `processor*/` directories and restart the solver from time 0 even though the checkpoint exists.
+
 ---
 
 ## Using the app
