@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from core.storage import StorageClient
 
 _CASE_RE = re.compile(r"^case_(\d+)$")
+_CASE_ID_REGISTRY_PREFIX = "case-ids/"
 
 @dataclass
 class CaseInfo:
@@ -22,16 +23,29 @@ class CaseRepository:
                 max_n = max(max_n, int(m.group(1)))
         return max_n
 
+    def _max_in_registry(self) -> int:
+        max_n = 0
+        for path in self._s.list_paths(_CASE_ID_REGISTRY_PREFIX):
+            cid = path.rsplit("/", 1)[-1]
+            m = _CASE_RE.match(cid)
+            if m:
+                max_n = max(max_n, int(m.group(1)))
+        return max_n
+
+    def _max_allocated(self) -> int:
+        return max(self._max_existing(), self._max_in_registry())
+
     def allocate_ids(self, project: str, count: int) -> list[str]:
         """Atomically reserve `count` fresh case ids. Robust to empty buckets and
         concurrent allocators: each id is claimed via a create-only marker, and a
         claim that loses the race simply advances to the next number."""
-        n = self._max_existing()
+        n = self._max_allocated()
         out: list[str] = []
         while len(out) < count:
             n += 1
             cid = f"case_{n:04d}"
-            if self._s.create_exclusive(f"cases/{project}/{cid}/.reserved", b""):
+            if self._s.create_exclusive(f"{_CASE_ID_REGISTRY_PREFIX}{cid}", b""):
+                self._s.create_exclusive(f"cases/{project}/{cid}/.reserved", b"")
                 out.append(cid)
         return out
 
