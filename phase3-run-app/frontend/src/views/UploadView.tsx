@@ -9,6 +9,16 @@ import { runPool, putFile } from "../lib/upload";
 
 type CaseFiles = { sourceName: string; name: string; files: { relPath: string; file: File }[] };
 
+const RESUME_AWARE_COMMAND = [
+  'if [[ "${OF_RESUME:-0}" != "1" ]]; then',
+  "  blockMesh; snappyHexMesh -overwrite; topoSet; createPatch -overwrite",
+  '  foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "${MPI_RANKS}"',
+  "  decomposePar -force",
+  "fi",
+  'mpirun --oversubscribe -np "${MPI_RANKS}" foamRun -parallel',
+  "reconstructPar -latestTime",
+].join("\n");
+
 function groupIntoCases(list: FileList): CaseFiles[] {
   const entries = Array.from(list).map((file) => ({
     parts: (file.webkitRelativePath || file.name).split("/"),
@@ -278,6 +288,15 @@ export function UploadView({
                   ))}
                 </div>
               )}
+              <div className="rounded-lg border border-black/10 bg-black/[0.025] p-3">
+                <p className="m-0 text-xs leading-5 text-[var(--ink-2)]">
+                  Tip: make sure each case&apos;s <code>command.sh</code> is <strong>resume-aware</strong> so a Spot preemption
+                  resumes from the last checkpoint instead of restarting from time 0. It should look like:
+                </p>
+                <div className="panel-foot mt-3 !min-h-0 !max-h-none rounded-md border !border-white/10">
+                  <pre className="foot-code !overflow-visible">{RESUME_AWARE_COMMAND}</pre>
+                </div>
+              </div>
               <div className="row-end">
                 <Button variant="outline" onClick={() => setPreflight(null)}>{preflight.length ? "Close" : "Cancel"}</Button>
                 {preflight.length === 0 && <Button onClick={upload}>Confirm upload</Button>}
