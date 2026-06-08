@@ -125,6 +125,54 @@ No `maxRunDuration` — jobs run until done.
 
 > **Checkpointing only works for parallel (decomposed) runs.** It keys entirely off `processor*/` folders: the poll loop watches `processor0` to decide when to checkpoint, and only `processor*/` (plus `system/`) is uploaded. A **serial** case (run without `decomposePar`, so results live in `case/<time>/` instead of `processor*/<time>/`) is silently **not** checkpointed — the loop never fires, and an interrupted serial run resumes from time 0. All our cases run parallel via MPI, so this gap is latent, not active — but anything submitted as a single-process run would have no checkpoint protection.
 
+### ⚠️ Spot in practice — a real interruption, and what broke (forensic, 2026-06-08)
+
+We ran `two-phase-test` (case `case_0012`, variant `c2d-highcpu-56`) on **Spot**. It got interrupted, and the post-mortem surfaced **three separate things** — only one of which was external. If you're relying on Spot, read this.
+
+**Timeline (from Batch logs + the checkpoint objects in GCS):**
+
+| Time (UTC) | Event |
+|---|---|
+| 6-06 ~10:16 | Job submitted (`case_0012`, `c2d-highcpu-56`, Spot). |
+| 6-06 10:16→13:59 | **~3.5 h bouncing QUEUED↔SCHEDULED** — c2d Spot capacity was already scarce *at submit*. |
+| 6-06 13:59:13 | Got a Spot VM → RUNNING. Runtime logged `Resuming from …/latest`, rsync'd a pre-existing checkpoint down. |
+| 6-06 13:59:46 | Resume-prep step logged `controlDict does not exist` (**non-fatal**, swallowed by `\|\| true`). `command.sh` then ran the full pipeline **from scratch**: `blockMesh → snappyHexMesh -overwrite → topoSet → createPatch → decomposePar -force → foamRun -parallel`, re-meshing ("Create mesh for time = 0", "Deleting polyMesh directory"). |
+| 6-06 14:05:45 | Solver started its time loop **from time 0** (adaptive deltaT ≈ 1.5 ms). |
+| 6-06 14:05 → 6-07 08:22 | ~18 h of wall-clock to reach **sim-time 3**. Checkpointed incrementally. |
+| ~6-07 18:39 | **Spot VM preempted.** The SIGTERM stop-handler trap fired and flushed a final checkpoint (constant/polyMesh + system re-uploaded at 18:39:54). |
+| 6-07 18:39 → … | Task = **PENDING**. The managed instance group could not get a replacement Spot `c2d-highcpu-56` anywhere in us-central1 → **67× `GCE_ZONE_RESOURCE_POOL_EXHAUSTED`**. Job stays **RUNNING** (not failed), waiting for capacity. |
+
+**Three findings, ranked by what actually hurts:**
+
+1. **The resume is defeated by a meshing `command.sh` (the real bug).** Checkpointing/preemption-flush/Batch-retry all worked, and the checkpoint (28.8 MiB, fully decomposed, sim-time 3) is intact. But our resume only sets `startFrom latestTime` — it does **not** stop `command.sh` from re-running `blockMesh`/`snappyHexMesh -overwrite`/**`decomposePar -force`**, which **wipe the restored `processor*/<time>` and restart the solver from 0.** A `command.sh` that re-meshes/re-decomposes on every invocation throws away all checkpointed progress. *Resume only saves compute if `command.sh` skips preprocessing when state already exists.*
+
+2. **The `startFrom latestTime` edit silently fails anyway (runtime bug).** The `controlDict does not exist` error was *not* a missing file — `system/controlDict` is in the upload. `foamDictionary` ran from the container's default CWD (`/root`) and mis-resolved the case path (note the `//root//mnt/...` in the error), so the `startFrom` edit never applied. It was swallowed by `\|\| true`, so it never surfaced. Fix: `cd "${CASE_DIR}"` (or pass `-case`) before `foamDictionary`, and stop swallowing the failure.
+
+3. **Spot recovery is hostage to zonal capacity (external, can't fix in code).** A preempted Spot job can only resume *if a replacement VM is available*. `c2d-highcpu` is a constrained family and Spot is the leftover on top of it — us-central1 had a multi-day stockout, so the job sat PENDING for >18 h. The job won't fail (good), but it won't progress either. For anything time-sensitive, use **Standard** provisioning, or expect indefinite PENDING during stockouts. (Cancelling is safe — the checkpoint is keyed by `<case_id>/<variant>` and only deleted on SUCCESS, so it survives.)
+
+**Resubmitting after a cancel:** the checkpoint path is `checkpoints/<case_id>/<variant>/latest` — keyed by **case + machine variant, not by job name/codename**. Cancel + resubmit the *same case on the same variant* and the new job *will* find and restore the checkpoint. ⚠️ Resubmit on a **different machine type** (→ different variant) and it starts from time 0. (Today, per finding #1, the restore is then clobbered by re-meshing regardless — fix #1 + #2 first.)
+
+### How that forensic was done — every log and resource, in order
+
+Reproducible trail for the next person debugging a stuck/interrupted Spot job. Replace the job/case identifiers with your own. (Job UID for the run above: `two-phase-test-30f80879-c013-43aa-86b0`.)
+
+**Code read (this repo):**
+- `phase3-run-app/runtime/run_case_in_batch.sh` — checkpoint prefix (`:27`), resume block + the `foamDictionary` bug (`:38–42`), `sync_checkpoint`/poll loop, SIGTERM stop-handler flush, success-deletes-checkpoint (`:147`).
+- `phase3-run-app/core/batch_jobs.py` — allocation policy, `provisioningModel`, `maxRetryCount`, no `allowedLocations` in code (`:98–137`).
+
+**GCP — Batch** (`gcloud batch`, project `cfd-lemnisca`, `us-central1`):
+- `jobs describe two-phase-test` → state RUNNING; `statusEvents` (the ~3.5 h QUEUED↔SCHEDULED bouncing → RUNNING at 13:59); `allocationPolicy` (`allowedLocations` = us-central1-a/b/c/f; local-SSD disks); env (`BUCKET`, `PROJECT`, `CASE_ID=case_0012`, `VARIANT_ID=c2d-highcpu-56`, `JOB_NAME`); `maxRetryCount=3`.
+- `tasks list … two-phase-test` → task state **PENDING**.
+
+**GCP — Cloud Logging** (`gcloud logging read`, `resource.type=batch.googleapis.com/Job`, `labels.job_uid=two-phase-test-30f80879-c013-43aa-86b0`):
+- The resume line, the `controlDict` FATAL IO + context, the full preprocessing chain (`blockMesh → snappyHexMesh → topoSet → createPatch → decomposePar -force → foamRun -parallel`), `Starting time loop`, deltaT progression — establishing the from-time-0 restart.
+
+**GCP — GCS** (`gcloud storage ls` / `ls -l` / `cat`):
+- `checkpoints/case_0012/c2d-highcpu-56/latest/` recursive → 144 objects / 28.8 MiB, `processor0–27` + `0/` + `constant/` + `system/`, time dirs `0…3`.
+- `ls -l` on the checkpoint → object timestamps: `0/` @ 6-06 10:14:59, `processor0/3/` @ 6-07 08:22:53, `processor0/constant/polyMesh` @ 6-07 18:39:54 (the preemption flush).
+- `cases/case_0012/case/system/` → confirmed `controlDict` **is** in the upload.
+- `cat cases/case_0012/case/command.sh` → the `setup_twophase.py`-generated unconditional mesh+decompose+solve pipeline.
+
 ---
 
 ## Local development
