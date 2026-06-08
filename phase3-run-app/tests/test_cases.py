@@ -5,6 +5,13 @@ def test_allocate_from_empty_starts_at_one():
     repo = CaseRepository(InMemoryStorage())
     assert repo.allocate_ids("turbine", 1) == ["case_0001"]
 
+def test_allocate_writes_global_marker_and_project_reservation():
+    s = InMemoryStorage()
+    repo = CaseRepository(s)
+    assert repo.allocate_ids("turbine", 1) == ["case_0001"]
+    assert s.object_exists("case-ids/case_0001") is True
+    assert s.object_exists("cases/turbine/case_0001/.reserved") is True
+
 def test_allocate_continues_after_existing_max():
     s = InMemoryStorage()
     for n in range(1, 31):  # case_0001..case_0030 exist
@@ -12,12 +19,33 @@ def test_allocate_continues_after_existing_max():
     repo = CaseRepository(s)
     assert repo.allocate_ids("wing", 3) == ["case_0031", "case_0032", "case_0033"]
 
+def test_allocate_uses_existing_cases_without_registry_for_backward_compat():
+    s = InMemoryStorage()
+    for n in range(1, 4):
+        s.upload_bytes(f"cases/turbine/case_{n:04d}/READY", b"")
+    repo = CaseRepository(s)
+    assert repo.allocate_ids("wing", 1) == ["case_0004"]
+
 def test_allocate_skips_reserved_but_not_ready_ids():
     # a half-allocated id with only a .reserved marker must NOT be reused
     s = InMemoryStorage()
     s.create_exclusive("cases/turbine/case_0001/.reserved", b"")
     repo = CaseRepository(s)
     assert repo.allocate_ids("wing", 1) == ["case_0002"]
+
+def test_allocate_skips_global_marker_without_project_reservation():
+    s = InMemoryStorage()
+    assert s.create_exclusive("case-ids/case_0001", b"") is True
+    repo = CaseRepository(s)
+    assert repo.allocate_ids("wing", 1) == ["case_0002"]
+    assert s.object_exists("cases/wing/case_0001/.reserved") is False
+    assert s.object_exists("cases/wing/case_0002/.reserved") is True
+
+def test_allocate_registry_blocks_reuse_after_cases_deleted():
+    s = InMemoryStorage()
+    assert s.create_exclusive("case-ids/case_0005", b"") is True
+    repo = CaseRepository(s)
+    assert repo.allocate_ids("turbine", 1) == ["case_0006"]
 
 def test_allocate_50_is_contiguous_and_unique():
     repo = CaseRepository(InMemoryStorage())
