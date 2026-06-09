@@ -1,4 +1,17 @@
-from typing import Protocol
+import io
+from typing import BinaryIO, Callable, Protocol
+
+
+class _PersistingBytesIO(io.BytesIO):
+    def __init__(self, persist: Callable[[bytes], None]) -> None:
+        super().__init__()
+        self._persist = persist
+
+    def close(self) -> None:
+        if not self.closed:
+            self._persist(self.getvalue())
+        super().close()
+
 
 class StorageClient(Protocol):
     def object_exists(self, path: str) -> bool: ...
@@ -8,6 +21,8 @@ class StorageClient(Protocol):
         """Create object only if it does not exist. True if created, False if it already existed."""
         ...
     def upload_bytes(self, path: str, data: bytes) -> None: ...
+    def open_read(self, path: str) -> BinaryIO: ...
+    def open_write(self, path: str) -> BinaryIO: ...
     def read_text(self, path: str) -> str: ...
     def list_case_ids(self) -> list[str]:
         """Return every case id that has an object under cases/<project>/<id>/."""
@@ -29,6 +44,12 @@ class InMemoryStorage:
 
     def upload_bytes(self, path: str, data: bytes) -> None:
         self._objs[path] = data
+
+    def open_read(self, path: str) -> BinaryIO:
+        return io.BytesIO(self._objs[path])
+
+    def open_write(self, path: str) -> BinaryIO:
+        return _PersistingBytesIO(lambda data: self._objs.__setitem__(path, data))
 
     def read_text(self, path: str) -> str:
         return self._objs[path].decode("utf-8")
@@ -75,6 +96,12 @@ class GcsStorage:
 
     def upload_bytes(self, path: str, data: bytes) -> None:
         self._bucket.blob(path).upload_from_string(data)
+
+    def open_read(self, path: str) -> BinaryIO:
+        return self._bucket.blob(path).open("rb")
+
+    def open_write(self, path: str) -> BinaryIO:
+        return self._bucket.blob(path).open("wb")
 
     def read_text(self, path: str) -> str:
         return self._bucket.blob(path).download_as_text()

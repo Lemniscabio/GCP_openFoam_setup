@@ -53,14 +53,23 @@ class SignedUrlService:
         )
         return SignedUpload(object_path=obj_path, url=url)
 
-    def get_url(self, obj_path: str, now: datetime.datetime) -> str:
-        return self._bucket.blob(obj_path).generate_signed_url(
+    def get_url(
+        self,
+        obj_path: str,
+        now: datetime.datetime,
+        *,
+        disposition: str | None = None,
+    ) -> str:
+        kwargs = dict(
             version="v4",
             expiration=now + self._ttl,
             method="GET",
             service_account_email=self._signer_email,
             access_token=self._token(),
         )
+        if disposition is not None:
+            kwargs["response_disposition"] = disposition
+        return self._bucket.blob(obj_path).generate_signed_url(**kwargs)
 
     def put_urls_for_case(
         self,

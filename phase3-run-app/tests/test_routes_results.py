@@ -1,4 +1,6 @@
 import datetime as _dt
+import io
+import zipfile
 
 from core.run_repo import RunRecord
 
@@ -45,7 +47,7 @@ def test_results_files_lists_case(client, mem_storage):
     assert {"name": "result.tar.gz", "size": 4} in response.json()["files"]
 
 
-def test_downloads_signs_results_only(client, mem_storage):
+def test_downloads_signs_results_only(client, mem_storage, fake_urls):
     mem_storage.upload_bytes(
         "results/turbine/phoenix/case_0006/result.tar.gz", b"abcd"
     )
@@ -63,6 +65,12 @@ def test_downloads_signs_results_only(client, mem_storage):
     assert len(body["downloads"]) == 1
     assert body["downloads"][0]["object"].endswith("result.tar.gz")
     assert "missing.txt" in body["missing"][0]
+    assert fake_urls.get_calls == [
+        (
+            "results/turbine/phoenix/case_0006/result.tar.gz",
+            'attachment; filename="result.tar.gz"',
+        )
+    ]
 
 
 def test_downloads_rejects_non_results_path(client):
@@ -71,3 +79,49 @@ def test_downloads_rejects_non_results_path(client):
         json={"objects": ["cases/turbine/case_0006/x"]},
     )
     assert response.status_code == 400
+
+
+def test_archive_builds_zip_and_returns_attachment_url(client, mem_storage, fake_urls):
+    mem_storage.upload_bytes(
+        "results/turbine/phoenix/case_0006/result.tar.gz", b"result-6"
+    )
+    mem_storage.upload_bytes(
+        "results/turbine/phoenix/case_0007/result.tar.gz", b"result-7"
+    )
+
+    response = client.post(
+        "/api/results/archive",
+        json={"project": "turbine", "job": "phoenix", "case": None},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["missing"] == []
+    archive_path, disposition = fake_urls.get_calls[-1]
+    assert archive_path.startswith("downloads/phoenix/")
+    assert archive_path.endswith(".zip")
+    assert disposition == 'attachment; filename="phoenix.zip"'
+    with zipfile.ZipFile(io.BytesIO(mem_storage._objs[archive_path])) as archive:
+        assert archive.namelist() == [
+            "case_0006/result.tar.gz",
+            "case_0007/result.tar.gz",
+        ]
+        assert archive.read("case_0006/result.tar.gz") == b"result-6"
+
+
+def test_archive_rejects_bad_path_components(client):
+    bad_requests = [
+        {"project": "turbine/other", "job": "phoenix", "case": None},
+        {"project": "turbine", "job": "phoenix..old", "case": None},
+    ]
+    for request in bad_requests:
+        response = client.post("/api/results/archive", json=request)
+        assert response.status_code == 400
+
+
+def test_archive_returns_404_when_no_results_exist(client):
+    response = client.post(
+        "/api/results/archive",
+        json={"project": "turbine", "job": "phoenix", "case": "case_0006"},
+    )
+    assert response.status_code == 404
