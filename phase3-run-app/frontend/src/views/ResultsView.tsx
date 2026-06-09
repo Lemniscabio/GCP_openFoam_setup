@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
+import { downloadZip } from "client-zip";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePanelVariants } from "@/lib/motion";
 import { api, type ResultFile, type ResultRun } from "../lib/client";
 
-type PendingDownload = { label: string; objects: string[] };
+type PendingDownload = {
+  label: string;
+  objects: string[];
+  zipName: string;
+  stripPrefix: string;
+};
 
 const runKey = (run: ResultRun) => `${run.project}/${run.codename}`;
 const caseKey = (run: ResultRun, caseId: string) => `${runKey(run)}/${caseId}`;
@@ -89,6 +95,8 @@ export function ResultsView() {
     setPending({
       label: `${run.codename} / ${caseId}`,
       objects: caseFiles.map((file) => objectPath(run, caseId, file.name)),
+      zipName: `${caseId}.zip`,
+      stripPrefix: `results/${run.project}/${run.codename}/`,
     });
   }
 
@@ -100,6 +108,8 @@ export function ResultsView() {
       setPending({
         label: `${run.project} / ${run.codename}`,
         objects: allFiles.flatMap((entry) => entry.files.map((file) => objectPath(run, entry.caseId, file.name))),
+        zipName: `${run.codename}.zip`,
+        stripPrefix: `results/${run.project}/${run.codename}/`,
       });
     } catch (error) {
       setErr(String(error));
@@ -110,12 +120,18 @@ export function ResultsView() {
 
   async function download() {
     if (!pending || pending.objects.length === 0 || busy) return;
+    const downloadRequest = pending;
     setBusy(true);
     setMissing([]);
     try {
-      const response = await api.postDownloads(pending.objects);
+      const response = await api.postDownloads(downloadRequest.objects);
       setMissing(response.missing);
-      for (const item of response.downloads) {
+      if (response.downloads.length === 0) {
+        setPending(null);
+        return;
+      }
+      if (response.downloads.length === 1) {
+        const item = response.downloads[0];
         const anchor = document.createElement("a");
         anchor.href = item.url;
         anchor.download = item.object.split("/").pop() ?? "download";
@@ -123,7 +139,30 @@ export function ResultsView() {
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
+        setPending(null);
+        return;
       }
+
+      async function* zipEntries() {
+        for (const item of response.downloads) {
+          const fileResponse = await fetch(item.url);
+          if (!fileResponse.ok) throw new Error(`Failed to download ${item.object}: ${fileResponse.status} ${fileResponse.statusText}`);
+          const name = item.object.startsWith(downloadRequest.stripPrefix)
+            ? item.object.slice(downloadRequest.stripPrefix.length)
+            : item.object.split("/").pop() ?? "download";
+          yield { name, input: fileResponse };
+        }
+      }
+
+      const blob = await downloadZip(zipEntries()).blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = downloadRequest.zipName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
       setPending(null);
     } catch (error) {
       setErr(String(error));
@@ -195,7 +234,12 @@ export function ResultsView() {
                                             <div className="stack-item" key={file.name}>
                                               <span className="stack-id">{file.name}</span>
                                               <span className="stack-path">{formatSize(file.size)}</span>
-                                              <Button variant="outline" size="sm" onClick={() => setPending({ label: file.name, objects: [objectPath(run, caseId, file.name)] })}>Download</Button>
+                                              <Button variant="outline" size="sm" onClick={() => setPending({
+                                                label: file.name,
+                                                objects: [objectPath(run, caseId, file.name)],
+                                                zipName: `${caseId}.zip`,
+                                                stripPrefix: `results/${run.project}/${run.codename}/`,
+                                              })}>Download</Button>
                                             </div>
                                           ))}
                                         </div>
