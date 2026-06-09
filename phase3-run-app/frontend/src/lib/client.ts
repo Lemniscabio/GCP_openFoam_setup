@@ -8,6 +8,8 @@ export type {
   ProjectInfo,
   ResultFile,
   ResultRun,
+  JobEvent,
+  JobLog,
   RunRecord,
   RunSummary,
 } from "./api";
