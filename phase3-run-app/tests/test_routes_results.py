@@ -2,6 +2,7 @@ import datetime as _dt
 import io
 import zipfile
 
+import backend.routes_results as routes_results
 from core.run_repo import RunRecord
 
 NOW = _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc)
@@ -98,8 +99,7 @@ def test_archive_builds_zip_and_returns_attachment_url(client, mem_storage, fake
     body = response.json()
     assert body["missing"] == []
     archive_path, disposition = fake_urls.get_calls[-1]
-    assert archive_path.startswith("downloads/phoenix/")
-    assert archive_path.endswith(".zip")
+    assert archive_path == "downloads/turbine/phoenix/all.zip"
     assert disposition == 'attachment; filename="phoenix.zip"'
     with zipfile.ZipFile(io.BytesIO(mem_storage._objs[archive_path])) as archive:
         assert archive.namelist() == [
@@ -107,6 +107,49 @@ def test_archive_builds_zip_and_returns_attachment_url(client, mem_storage, fake
             "case_0007/result.tar.gz",
         ]
         assert archive.read("case_0006/result.tar.gz") == b"result-6"
+
+
+def test_archive_uses_case_scoped_deterministic_path(client, mem_storage, fake_urls):
+    mem_storage.upload_bytes(
+        "results/turbine/phoenix/case_0006/result.tar.gz", b"result-6"
+    )
+
+    response = client.post(
+        "/api/results/archive",
+        json={"project": "turbine", "job": "phoenix", "case": "case_0006"},
+    )
+
+    assert response.status_code == 200
+    assert "downloads/turbine/phoenix/case_0006.zip" in mem_storage._objs
+    assert fake_urls.get_calls[-1] == (
+        "downloads/turbine/phoenix/case_0006.zip",
+        'attachment; filename="case_0006.zip"',
+    )
+
+
+def test_archive_reuses_cached_zip(client, mem_storage, monkeypatch):
+    mem_storage.upload_bytes(
+        "results/turbine/phoenix/case_0006/result.tar.gz", b"result-6"
+    )
+    original_build_zip = routes_results.build_zip
+    build_calls = 0
+
+    def counted_build_zip(*args, **kwargs):
+        nonlocal build_calls
+        build_calls += 1
+        return original_build_zip(*args, **kwargs)
+
+    monkeypatch.setattr(routes_results, "build_zip", counted_build_zip)
+    request = {"project": "turbine", "job": "phoenix", "case": "case_0006"}
+
+    first = client.post("/api/results/archive", json=request)
+    second = client.post("/api/results/archive", json=request)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["url"]
+    assert second.json()["url"]
+    assert build_calls == 1
 
 
 def test_archive_rejects_bad_path_components(client):

@@ -1,6 +1,5 @@
 import datetime
 import re
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -105,6 +104,22 @@ def archive_results(
     urls=Depends(url_service),
 ):
     base_prefix, source_prefix = _validated_archive_prefix(req)
+    scope = req.case if req.case else "all"
+    dest_path = f"downloads/{req.project}/{req.job}/{scope}.zip"
+    name = f"{req.case}.zip" if req.case else f"{req.job}.zip"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    disposition = f'attachment; filename="{name}"'
+
+    # Finished-run results are immutable, and the downloads/ 1-day lifecycle
+    # expires stale archives so the next request refreshes them. A still-running
+    # job is the acceptable staleness edge. Concurrent misses may both build and
+    # overwrite identical content at this path; last write wins, so no lock is needed.
+    if store.object_exists(dest_path):
+        return {
+            "url": urls.get_url(dest_path, now, disposition=disposition),
+            "missing": [],
+        }
+
     entries = [
         (object_path[len(base_prefix):], object_path)
         for object_path, _size in store.list_objects(source_prefix)
@@ -113,13 +128,9 @@ def archive_results(
     if not entries:
         raise HTTPException(status_code=404, detail="no result objects found")
 
-    dest_path = f"downloads/{req.job}/{uuid.uuid4().hex}.zip"
     # This synchronous stream-through build may approach Cloud Run's request timeout
     # for very large jobs; async archive creation is intentionally deferred.
     missing = build_zip(store, dest_path, entries)
-    name = f"{req.case}.zip" if req.case else f"{req.job}.zip"
-    now = datetime.datetime.now(datetime.timezone.utc)
-    disposition = f'attachment; filename="{name}"'
     return {
         "url": urls.get_url(dest_path, now, disposition=disposition),
         "missing": missing,
