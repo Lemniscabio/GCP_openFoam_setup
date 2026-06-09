@@ -141,6 +141,37 @@ No `maxRunDuration` — jobs run until done.
 
 > **Checkpointing only works for parallel (decomposed) runs.** It keys entirely off `processor*/` folders: the poll loop watches `processor0` to decide when to checkpoint, and only `processor*/` (plus `system/`) is uploaded. A **serial** case (run without `decomposePar`, so results live in `case/<time>/` instead of `processor*/<time>/`) is silently **not** checkpointed — the loop never fires, and an interrupted serial run resumes from time 0. All our cases run parallel via MPI, so this gap is latent, not active — but anything submitted as a single-process run would have no checkpoint protection.
 
+### What the checkpoint folder holds (and `purgeWrite 0`)
+
+`checkpoints/<case_id>/<variant>/latest/` for a **parallel (decomposed)** run contains:
+- **Every `processorN/` directory**, rsynced recursively — so **all timestep dirs present on
+  disk** (with `purgeWrite 0`, *every* written timestep), plus each `processorN/constant/`
+  (incl. the decomposed `polyMesh`) and `uniform/`.
+- **`system/`**.
+- *Not* the top-level `constant/` (restored from the case upload on resume) or reconstructed
+  time dirs (those only exist after `reconstructPar` at the end).
+
+The sync uses `gcloud storage rsync --recursive` **without** delete — it's **additive**, so it
+**accumulates every timestep**, and each sync copies all present time dirs (nothing is missed
+between 30 s polls; the SIGTERM handler also flushes a final sync). **Resume therefore works for
+`purgeWrite 0` on both Standard and Spot** — the restore brings back every timestep, sets
+`startFrom latestTime`, and (via the `OF_RESUME` gate) skips re-meshing so the timesteps survive.
+
+**Three caveats for `purgeWrite 0`:**
+1. **Reconstruct all times, not just the last.** The runtime tars the whole case dir, so
+   `result.tar.gz` has all timesteps *decomposed* under `processor*/` — but a `command.sh`
+   ending in `reconstructPar -latestTime` only reconstructs the **last** time. For `purgeWrite 0`
+   use `reconstructPar` (all times) in your generator, or the kept timesteps won't be
+   reconstructed/usable in the results.
+2. **Resume restore grows with run length.** `purgeWrite 0` makes the checkpoint grow unbounded;
+   syncs stay cheap (incremental), but a resume **re-downloads the whole accumulated checkpoint**
+   (GB / minutes for long runs) before the solver restarts.
+3. **Serial runs don't resume.** The resume guard checks `processor0/constant/polyMesh`, so a
+   serial (non-decomposed) run never sets `OF_RESUME` (latent — our cases are parallel/MPI).
+
+> Note: `checkpoints/` has no lifecycle delete rule — a checkpoint is removed only on SUCCESS,
+> so failed/abandoned runs leave their checkpoints behind.
+
 ### ⚠️ Spot in practice — a real interruption, and what broke (forensic, 2026-06-08)
 
 We ran `two-phase-test` (case `case_0012`, variant `c2d-highcpu-56`) on **Spot**. It got interrupted, and the post-mortem surfaced **three separate things** — only one of which was external. If you're relying on Spot, read this.
