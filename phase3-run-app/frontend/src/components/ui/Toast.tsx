@@ -3,15 +3,13 @@ import { useEffect, useRef, useState } from "react";
 type ToastProps = {
   message: string | null;
   onDismiss: () => void;
-  duration?: number;
 };
 
 const EXIT_DURATION = 160;
 
-export function Toast({ message, onDismiss, duration = 3500 }: ToastProps) {
+export function Toast({ message, onDismiss }: ToastProps) {
   const [renderedMessage, setRenderedMessage] = useState(message);
   const [exiting, setExiting] = useState(false);
-  const autoDismissTimer = useRef<number | undefined>(undefined);
   const exitTimer = useRef<number | undefined>(undefined);
   const onDismissRef = useRef(onDismiss);
 
@@ -20,7 +18,6 @@ export function Toast({ message, onDismiss, duration = 3500 }: ToastProps) {
   }, [onDismiss]);
 
   useEffect(() => {
-    window.clearTimeout(autoDismissTimer.current);
     window.clearTimeout(exitTimer.current);
 
     if (!message) {
@@ -33,22 +30,10 @@ export function Toast({ message, onDismiss, duration = 3500 }: ToastProps) {
 
     setRenderedMessage(message);
     setExiting(false);
-    autoDismissTimer.current = window.setTimeout(() => {
-      setExiting(true);
-      exitTimer.current = window.setTimeout(() => {
-        setRenderedMessage(null);
-        onDismissRef.current();
-      }, EXIT_DURATION);
-    }, duration);
-
-    return () => {
-      window.clearTimeout(autoDismissTimer.current);
-      window.clearTimeout(exitTimer.current);
-    };
-  }, [duration, message]);
+    return () => window.clearTimeout(exitTimer.current);
+  }, [message]);
 
   function dismiss() {
-    window.clearTimeout(autoDismissTimer.current);
     window.clearTimeout(exitTimer.current);
     setExiting(true);
     exitTimer.current = window.setTimeout(() => {
