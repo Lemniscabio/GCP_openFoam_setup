@@ -120,6 +120,15 @@ def batch_state_getter():
     return _get
 
 
+def _status_event_to_dict(event) -> dict:
+    event_time = event.event_time
+    return {
+        "type": event.type_,
+        "description": event.description,
+        "event_time": event_time.isoformat() if event_time else "",
+    }
+
+
 def batch_events_getter():
     """Return a callable get_events(batch_job_id) -> oldest-first status events.
 
@@ -133,16 +142,7 @@ def batch_events_getter():
     def _get(batch_job_id: str) -> list[dict]:
         try:
             job = client.get_job(name=f"{parent}/jobs/{batch_job_id}")
-            events = []
-            for event in job.status.status_events:
-                event_time = event.event_time
-                if event_time:
-                    event_time = event_time.ToDatetime().isoformat()
-                events.append({
-                    "type": event.type_,
-                    "description": event.description,
-                    "event_time": event_time or "",
-                })
+            events = [_status_event_to_dict(event) for event in job.status.status_events]
             return sorted(events, key=lambda event: event["event_time"])
         except Exception:
             return []
