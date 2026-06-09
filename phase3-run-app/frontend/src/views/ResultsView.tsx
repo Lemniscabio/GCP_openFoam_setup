@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/Spinner";
 import { usePanelVariants } from "@/lib/motion";
 import { api, type ResultFile, type ResultRun } from "../lib/client";
 
@@ -189,7 +190,10 @@ export function ResultsView() {
                                 <span className="stack-path block">{run.submitted_by} · {new Date(run.submitted_at).toLocaleString()}</span>
                               </button>
                               <Badge variant={run.state === "SUCCEEDED" ? "default" : "secondary"}>{run.state}</Badge>
-                              <Button variant="outline" size="sm" disabled={busy} onClick={() => confirmRun(run)}>Download all</Button>
+                              <Button variant="outline" size="sm" disabled={busy} onClick={() => confirmRun(run)}>
+                                {busy && <Spinner size={14} label="Packaging download" />}
+                                Download all
+                              </Button>
                             </div>
                             {runOpen && (
                               <div className="ml-5 grid gap-1 border-l border-black/10 pl-3">
@@ -258,9 +262,22 @@ export function ResultsView() {
                     ? `${pending.fileCount} file(s) will be packaged into a zip archive.`
                     : "All result files will be packaged into a zip archive."}
               </div>
+              {busy && (
+                <div className="flex items-center justify-center gap-2 pb-5 text-center text-xs text-[var(--ink-2)]">
+                  <Spinner size={16} label="Packaging download" />
+                  <span>Packaging your files into a zip — this can take a moment for large result sets.</span>
+                </div>
+              )}
               <div className="row-end">
                 <Button variant="outline" disabled={busy} onClick={() => setPending(null)}>Cancel</Button>
-                <Button disabled={busy} onClick={download}>{busy ? "Preparing…" : "Confirm download"}</Button>
+                <Button disabled={busy} onClick={download}>
+                  {busy ? (
+                    <>
+                      <Spinner size={16} label="Packaging download" />
+                      Packaging…
+                    </>
+                  ) : "Confirm download"}
+                </Button>
               </div>
             </div>
           </div>
