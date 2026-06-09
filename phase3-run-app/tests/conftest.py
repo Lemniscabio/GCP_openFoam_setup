@@ -47,6 +47,9 @@ class _FakeBuilder:
 
 
 class _FakeUrls:
+    def __init__(self) -> None:
+        self.get_calls = []
+
     def put_urls_for_case(self, project, case_id, files, now):
         from core.uploads import SignedUpload, object_path
 
@@ -58,8 +61,14 @@ class _FakeUrls:
             for file in files
         ]
 
-    def get_url(self, obj_path, now):
+    def get_url(self, obj_path, now, *, disposition=None):
+        self.get_calls.append((obj_path, disposition))
         return f"https://signed-get/{obj_path}"
+
+
+@pytest.fixture
+def fake_urls():
+    return _FakeUrls()
 
 
 @pytest.fixture
@@ -109,7 +118,7 @@ def valid_case(mem_storage, mem_case_records):
 
 
 @pytest.fixture
-def client(mem_storage, mem_case_records, mem_projects, mem_runs, mem_users, fake_submitter):
+def client(mem_storage, mem_case_records, mem_projects, mem_runs, mem_users, fake_submitter, fake_urls):
     test_app = backend_main.app
     previous = test_app.dependency_overrides.copy()
     test_app.dependency_overrides[deps.storage] = lambda: mem_storage
@@ -120,7 +129,7 @@ def client(mem_storage, mem_case_records, mem_projects, mem_runs, mem_users, fak
     test_app.dependency_overrides[deps.user_repo] = lambda: mem_users
     test_app.dependency_overrides[deps.submitter] = lambda: fake_submitter
     test_app.dependency_overrides[deps.builder] = lambda: _FakeBuilder()
-    test_app.dependency_overrides[deps.url_service] = lambda: _FakeUrls()
+    test_app.dependency_overrides[deps.url_service] = lambda: fake_urls
     # list_runs reconcile needs a Batch state getter; default fake reports RUNNING so
     # existing RUNNING runs are unchanged (deleted-job tests override this to None).
     test_app.dependency_overrides[deps.batch_state_getter] = lambda: (lambda jid: "RUNNING")

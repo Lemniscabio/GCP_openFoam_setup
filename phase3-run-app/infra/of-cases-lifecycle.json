@@ -1,0 +1,16 @@
+{
+  "rule": [
+    {
+      "action": { "type": "SetStorageClass", "storageClass": "NEARLINE" },
+      "condition": { "age": 60, "matchesPrefix": ["cases/"] }
+    },
+    {
+      "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+      "condition": { "age": 180, "matchesPrefix": ["results/"] }
+    },
+    {
+      "action": { "type": "Delete" },
+      "condition": { "age": 1, "matchesPrefix": ["downloads/"] }
+    }
+  ]
+}

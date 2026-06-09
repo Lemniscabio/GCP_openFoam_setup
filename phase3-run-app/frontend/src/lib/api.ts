@@ -121,6 +121,13 @@ export class ApiClient {
   postDownloads(objects: string[]): Promise<{ downloads: DownloadLink[]; missing: string[] }> {
     return this.req("POST", "/api/results/downloads", { objects });
   }
+  postArchive(project: string, job: string, caseId?: string): Promise<{ url: string; missing: string[] }> {
+    return this.req("POST", "/api/results/archive", {
+      project,
+      job,
+      case: caseId ?? null,
+    });
+  }
   getMyRuns(): Promise<{ runs: RunRecord[] }> {
     return this.req("GET", "/api/me/runs");
   }

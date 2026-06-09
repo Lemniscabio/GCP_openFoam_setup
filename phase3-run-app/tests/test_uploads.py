@@ -83,3 +83,18 @@ def test_get_url_signs_a_GET():
     assert url == "https://signed-get"
     assert bkt.b.kw["method"] == "GET"
     assert bkt.b.kw["version"] == "v4"
+
+
+def test_get_url_threads_response_disposition():
+    bkt = _FakeBucket()
+    svc = SignedUrlService(bkt, "sa@x.iam.gserviceaccount.com", lambda: "tok")
+
+    svc.get_url(
+        "results/turbine/phoenix/case_0006/result.tar.gz",
+        datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        disposition='attachment; filename="result.tar.gz"',
+    )
+
+    assert bkt.blobs[
+        "results/turbine/phoenix/case_0006/result.tar.gz"
+    ].kwargs["response_disposition"] == 'attachment; filename="result.tar.gz"'
