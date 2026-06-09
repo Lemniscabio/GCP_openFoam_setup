@@ -919,6 +919,41 @@ button {
   50%       { opacity: 1; }
 }
 
+@keyframes ios-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ios-spinner-status,
+.ios-spinner {
+  display: inline-block;
+  width: var(--spinner-size);
+  height: var(--spinner-size);
+  flex: 0 0 auto;
+}
+
+.ios-spinner {
+  position: relative;
+  animation: ios-spin 1s steps(12, end) infinite;
+  color: currentColor;
+  will-change: transform;
+}
+
+.ios-spinner-bar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--spinner-size) * 0.1);
+  height: calc(var(--spinner-size) * 0.28);
+  background: currentColor;
+  border-radius: 999px;
+  clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%);
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ios-spinner { animation: none; }
+}
+
 .skeleton-row {
   pointer-events: none;
   animation: skel-pulse 1.4s ease-in-out infinite;
