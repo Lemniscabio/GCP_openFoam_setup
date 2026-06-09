@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/Spinner";
+import { Toast } from "@/components/ui/Toast";
 import { usePanelVariants } from "@/lib/motion";
 import { api, type ResultFile, type ResultRun } from "../lib/client";
 
@@ -45,6 +46,7 @@ export function ResultsView() {
   const [missing, setMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const panelVariants = usePanelVariants();
   const projects = useMemo(() => {
@@ -135,6 +137,7 @@ export function ResultsView() {
         setMissing(response.missing);
         if (response.downloads.length > 0) {
           followDownloadUrl(response.downloads[0].url);
+          setToast("Download started — check your browser downloads.");
         }
       } else {
         const response = await api.postArchive(
@@ -144,6 +147,7 @@ export function ResultsView() {
         );
         setMissing(response.missing);
         followDownloadUrl(response.url);
+        setToast("Download started — check your browser downloads.");
       }
       setPending(null);
     } catch (error) {
@@ -283,6 +287,7 @@ export function ResultsView() {
           </div>
         </div>
       )}
+      <Toast message={toast} onDismiss={() => setToast(null)} />
     </motion.div>
   );
 }
