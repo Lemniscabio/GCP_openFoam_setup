@@ -10,7 +10,7 @@
     },
     {
       "action": { "type": "Delete" },
-      "condition": { "age": 1, "matchesPrefix": ["downloads/"] }
+      "condition": { "age": 7, "matchesPrefix": ["downloads/"] }
     }
   ]
 }
