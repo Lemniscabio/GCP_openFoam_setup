@@ -71,6 +71,7 @@ app.dependency_overrides[deps.builder] = lambda: _FakeBuilder()
 app.dependency_overrides[deps.user_repo] = lambda: _users
 # list_runs reconcile needs a Batch state getter; fake reports RUNNING (no real client).
 app.dependency_overrides[deps.batch_state_getter] = lambda: (lambda jid: "RUNNING")
+app.dependency_overrides[deps.batch_events_getter] = lambda: (lambda jid: [])
 client = TestClient(app)
 
 
@@ -83,6 +84,7 @@ def _override_deps():
     app.dependency_overrides[deps.project_repo] = lambda: _projects
     app.dependency_overrides[deps.run_repo] = lambda: _runs
     app.dependency_overrides[deps.builder] = lambda: _FakeBuilder()
+    app.dependency_overrides[deps.batch_events_getter] = lambda: (lambda jid: [])
 
 
 def _seed_valid_case(case_id, project="turbine"):
@@ -203,6 +205,63 @@ def test_run_detail():
 
     assert r.status_code == 200
     assert r.json()["checkpoint_latest_timestep"] == 5.4
+
+
+def test_job_events_returns_batch_events(client):
+    events = [
+        {"type": "JOB_STATE_CHANGED", "description": "Job queued", "event_time": "2026-06-09T10:00:00+00:00"},
+        {"type": "JOB_STATE_CHANGED", "description": "Job running", "event_time": "2026-06-09T10:01:00+00:00"},
+    ]
+    client.app.dependency_overrides[deps.batch_events_getter] = lambda: (lambda job: events)
+
+    response = client.get("/api/jobs/phoenix/events")
+
+    assert response.status_code == 200
+    assert response.json() == {"events": events}
+
+
+def test_job_events_returns_empty_list_when_job_is_aged_out(client):
+    client.app.dependency_overrides[deps.batch_events_getter] = lambda: (lambda job: [])
+
+    response = client.get("/api/jobs/phoenix/events")
+
+    assert response.status_code == 200
+    assert response.json() == {"events": []}
+
+
+def test_job_log_returns_stored_text(client, mem_storage):
+    path = "results/turbine/phoenix/case_0006/solver.stdout.log"
+    mem_storage.upload_bytes(path, b"solver output\n")
+
+    response = client.get("/api/jobs/phoenix/log?project=turbine&case=case_0006")
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "solver output\n", "truncated": False, "missing": False}
+
+
+def test_job_log_reports_missing_object(client):
+    response = client.get("/api/jobs/phoenix/log?project=turbine&case=case_9999")
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "", "truncated": False, "missing": True}
+
+
+def test_job_log_returns_last_256_kib(client, mem_storage):
+    cap = 256 * 1024
+    text = "prefix" + ("x" * cap)
+    path = "results/turbine/phoenix/case_0006/solver.stdout.log"
+    mem_storage.upload_bytes(path, text.encode())
+
+    response = client.get("/api/jobs/phoenix/log?project=turbine&case=case_0006")
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "x" * cap, "truncated": True, "missing": False}
+
+
+def test_job_log_rejects_path_components(client):
+    response = client.get("/api/jobs/phoenix/log?project=../secrets&case=case_0006")
+
+    assert response.status_code == 400
 
 
 def test_submit_writes_run_record(client, valid_case, mem_runs, mem_case_records):

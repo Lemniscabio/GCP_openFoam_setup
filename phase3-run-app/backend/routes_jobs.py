@@ -1,9 +1,11 @@
 import dataclasses
 import datetime
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.deps import (
+    batch_events_getter,
     batch_state_getter,
     builder,
     case_record_repo,
@@ -23,6 +25,14 @@ from core.run_repo import RunRecord
 from core.validation import validate_case
 
 router = APIRouter()
+_LOG_TAIL_CHARS = 256 * 1024
+_PATH_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+def _result_log_path(project: str, job: str, case_id: str) -> str:
+    if not all(_PATH_COMPONENT.fullmatch(value) for value in (project, job, case_id)):
+        raise HTTPException(status_code=400, detail="invalid result path component")
+    return f"results/{project}/{job}/{case_id}/solver.stdout.log"
 
 
 @router.get("/job-name/suggest")
@@ -112,6 +122,36 @@ def list_runs(
     # Backstop deletions (Batch sends no Pub/Sub event on delete) + any missed events.
     reconcile_non_terminal(runs, get_state, datetime.datetime.now(datetime.timezone.utc))
     return {"runs": [dataclasses.asdict(r) for r in runs.list_recent()]}
+
+
+@router.get("/jobs/{job_name}/events")
+def job_events(
+    job_name: str,
+    account=Depends(require_active),
+    get_events=Depends(batch_events_getter),
+):
+    return {"events": get_events(job_name)}
+
+
+@router.get("/jobs/{job_name}/log")
+def job_log(
+    job_name: str,
+    project: str,
+    case: str,
+    account=Depends(require_active),
+    store=Depends(storage),
+):
+    path = _result_log_path(project, job_name, case)
+    if not store.object_exists(path):
+        return {"text": "", "truncated": False, "missing": True}
+
+    text = store.read_text(path)
+    truncated = len(text) > _LOG_TAIL_CHARS
+    return {
+        "text": text[-_LOG_TAIL_CHARS:] if truncated else text,
+        "truncated": truncated,
+        "missing": False,
+    }
 
 
 @router.get("/jobs/{job_name}")

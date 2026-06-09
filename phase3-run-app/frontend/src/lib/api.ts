@@ -34,7 +34,9 @@ export type RunRecord = {
   finished_at: string | null;
   project: string;
 };
-export type RunSummary = { job_name: string; state: string; progress_pct: number | null };
+export type RunSummary = RunRecord & { progress_pct?: number | null };
+export type JobEvent = { type: string; description: string; event_time: string };
+export type JobLog = { text: string; truncated: boolean; missing: boolean };
 export type Me = { email: string; role: string | null; status: string };
 export type ManagedUser = { email: string; role: string | null; status: string; decided_by: string | null };
 
@@ -95,6 +97,13 @@ export class ApiClient {
   }
   runDetail(job: string, caseId: string, variant: string) {
     return this.req("GET", `/api/jobs/${job}?case_id=${caseId}&variant=${variant}`);
+  }
+  getJobEvents(job: string): Promise<{ events: JobEvent[] }> {
+    return this.req("GET", `/api/jobs/${encodeURIComponent(job)}/events`);
+  }
+  getJobLog(job: string, project: string, caseId: string): Promise<JobLog> {
+    const query = new URLSearchParams({ project, case: caseId });
+    return this.req("GET", `/api/jobs/${encodeURIComponent(job)}/log?${query}`);
   }
   getMe(): Promise<Me> {
     return this.req("GET", "/api/me");

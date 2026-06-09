@@ -118,3 +118,33 @@ def batch_state_getter():
             return None
 
     return _get
+
+
+def batch_events_getter():
+    """Return a callable get_events(batch_job_id) -> oldest-first status events.
+
+    Batch jobs can be deleted or aged out before users inspect them, so event lookup is
+    deliberately best-effort and returns an empty list for any API failure.
+    """
+    client = batch_v1.BatchServiceClient()
+    s = settings()
+    parent = f"projects/{s.project_id}/locations/{s.region}"
+
+    def _get(batch_job_id: str) -> list[dict]:
+        try:
+            job = client.get_job(name=f"{parent}/jobs/{batch_job_id}")
+            events = []
+            for event in job.status.status_events:
+                event_time = event.event_time
+                if event_time:
+                    event_time = event_time.ToDatetime().isoformat()
+                events.append({
+                    "type": event.type_,
+                    "description": event.description,
+                    "event_time": event_time or "",
+                })
+            return sorted(events, key=lambda event: event["event_time"])
+        except Exception:
+            return []
+
+    return _get

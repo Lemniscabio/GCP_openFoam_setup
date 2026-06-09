@@ -124,6 +124,7 @@ def client(mem_storage, mem_case_records, mem_projects, mem_runs, mem_users, fak
     # list_runs reconcile needs a Batch state getter; default fake reports RUNNING so
     # existing RUNNING runs are unchanged (deleted-job tests override this to None).
     test_app.dependency_overrides[deps.batch_state_getter] = lambda: (lambda jid: "RUNNING")
+    test_app.dependency_overrides[deps.batch_events_getter] = lambda: (lambda jid: [])
     test_app.dependency_overrides[rbac.current_account] = lambda: (
         User(email="dev@lemnisca.bio", sub="d"),
         UserRecord(
