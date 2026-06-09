@@ -13,6 +13,38 @@ class _PersistingBytesIO(io.BytesIO):
         super().close()
 
 
+class _NoFlushWriter:
+    """Adapt a GCS BlobWriter for callers that flush before closing."""
+    def __init__(self, inner: BinaryIO) -> None:
+        self._inner = inner
+
+    def write(self, data: bytes) -> int:
+        return self._inner.write(data)
+
+    def tell(self) -> int:
+        return self._inner.tell()
+
+    def flush(self) -> None:
+        # BlobWriter cannot flush partial resumable-upload chunks.
+        pass
+
+    def writable(self) -> bool:
+        return self._inner.writable()
+
+    def seekable(self) -> bool:
+        return False
+
+    def close(self) -> None:
+        self._inner.close()
+
+    def __enter__(self) -> "_NoFlushWriter":
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        self.close()
+        return False
+
+
 class StorageClient(Protocol):
     def object_exists(self, path: str) -> bool: ...
     def list_paths(self, prefix: str) -> list[str]: ...
@@ -101,7 +133,7 @@ class GcsStorage:
         return self._bucket.blob(path).open("rb")
 
     def open_write(self, path: str) -> BinaryIO:
-        return self._bucket.blob(path).open("wb")
+        return _NoFlushWriter(self._bucket.blob(path).open("wb"))
 
     def read_text(self, path: str) -> str:
         return self._bucket.blob(path).download_as_text()
