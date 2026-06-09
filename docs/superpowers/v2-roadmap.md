@@ -50,7 +50,11 @@ Plan: `docs/superpowers/plans/2026-06-06-projects-foundation.md`
 - **Job name = the one-word codename** (Feature D); globally unique; results folder segment.
 - **Jobs are single-project** (all cases from one project).
 - **`metadata.json`** required per case (opaque JSON the user writes; shown in Cases).
-- **Downloads:** signed URLs, never server-side zip.
+- **Downloads:** signed URLs. *(Updated 2026-06-09: multi-file "Download all" now builds a
+  zip **server-side** to a temp GCS object and returns a signed URL — Option 1. The original
+  "never server-side zip" was a pragmatic choice, not a hard cap; client-side zip hung on large
+  result sets, so we moved the work to the cloud. Single files: signed URL with
+  content-disposition. See `core/archives.py`, `POST /api/results/archive`.)*
 - **Status pipeline:** keep Pub/Sub + reconcile (debugged); `of_runs` is the durable audit log.
 - **Old pre-project data:** left as-is (not migrated).
 - **Rollout rule:** rebuild + push the runtime image *before* merging any `RUNTIME_IMAGE` bump.
