@@ -176,6 +176,8 @@ between 30 s polls; the SIGTERM handler also flushes a final sync). **Resume the
 
 We ran `two-phase-test` (case `case_0012`, variant `c2d-highcpu-56`) on **Spot**. It got interrupted, and the post-mortem surfaced **three separate things** — only one of which was external. If you're relying on Spot, read this.
 
+> **✅ Resolved (2026-06-09 → re-confirmed 2026-06-11).** Findings #1 and #2 below are **fixed in current code**: `run_case_in_batch.sh` now runs `foamDictionary` from `${CASE_DIR}` and exits 70 (no longer swallowed) so `startFrom latestTime` actually applies, and both case generators emit a resume-aware `command.sh` gated on `OF_RESUME`. Resume is verified end-to-end (job `sheep`/`case_0080`). A later Spot run (`alarm`/`case_0080`) preempted at ~sim-time 12 with its decomposed checkpoint intact in GCS — it failed **only** because every retry hit `RESOURCE_POOL_EXHAUSTED` (STOCKOUT) in `us-central1-c` and could not get a replacement VM. So **finding #3 (zonal Spot capacity) is the sole remaining limitation** of the whole GCP layer. Mitigations under investigation: higher `maxRetryCount` + multi-zone/multi-region placement (background tests).
+
 **Timeline (from Batch logs + the checkpoint objects in GCS):**
 
 | Time (UTC) | Event |
