@@ -19,6 +19,14 @@ check), pytest. OpenFOAM v12 image `kartikeyattri/openfoam:12` for the smoke tes
 
 **Spec:** `docs/superpowers/specs/2026-06-15-parts-a-b-str-pipeline-design.md` (D8, D11, D14).
 
+> **v12 CORRECTIONS (from the `incompressibleFluid/mixerVessel2DMRF` tutorial in the image — our exact
+> case type; mirror it):** MRF is defined in **`constant/MRFProperties`** (NOT an fvModel — D8 was
+> wrong). Turbulence model = **`kEpsilon`** (fields `k`, `epsilon`, `nut`; NOT kOmegaSST/omega) to
+> match the proven tutorial. `omega` is written with **`[rpm]` units directly** (`omega 90 [rpm];`),
+> no rad/s conversion needed in the dict. Rotor (rotating) walls use **`MRFnoSlip`** in `0/U`;
+> stationary walls `noSlip`; `liquidSurface` `slip`. `nu` is dimensioned: `nu [0 2 -1 0 0 0 0] <val>;`.
+> Tasks below are adjusted accordingly (B2 MRFProperties, B3 kEpsilon, B4 fields = U/p/k/epsilon/nut).
+
 **Colocation decision:** Part B lives as a subpackage **`str_cad/ofcase/`** in the existing
 `part-a-cad/` package + venv (shares `STRParams`/`meshcase`; avoids cross-package plumbing and the
 codex-hang risk of multi-venv setup). It's a pragmatic colocation — can be split into its own
