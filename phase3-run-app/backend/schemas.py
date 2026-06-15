@@ -16,6 +16,28 @@ class FinalizeReq(BaseModel):
     project: str
 
 
+class GeneratePreviewReq(BaseModel):
+    prompt: str | None = None
+    params: dict | None = None
+    case_params: dict | None = None
+
+
+class GeneratePreviewResp(BaseModel):
+    str_params: dict
+    case_params: dict
+    stls: dict[str, str]
+
+
+class GenerateCreateReq(BaseModel):
+    project: str
+    params: dict
+    case_params: dict | None = None
+
+
+class GenerateCreateResp(BaseModel):
+    case_id: str
+
+
 class SubmitReq(BaseModel):
     case_ids: list[str] = Field(min_length=1)
     machine_type: str
