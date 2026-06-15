@@ -1,6 +1,5 @@
 import json
 import os
-import stat
 import pathlib
 
 
@@ -8,38 +7,24 @@ def write_command_sh(cp, path) -> pathlib.Path:
     path = pathlib.Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f'''#!/bin/bash
-set -e
+        '''#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+: "${MPI_RANKS:?MPI_RANKS is required}"
 
-CORES={cp.run.cores}
-
-if [[ "${{OF_RESUME:-0}}" != "1" ]]; then
-    blockMesh
-    snappyHexMesh -overwrite
-    topoSet
-    if [[ "$CORES" -gt 1 ]]; then
-        decomposePar -force
-    fi
+if [[ "${OF_RESUME:-0}" != "1" ]]; then
+  blockMesh 2>&1 | tee log.blockMesh
+  snappyHexMesh -overwrite 2>&1 | tee log.snappyHexMesh
+  topoSet 2>&1 | tee log.topoSet
+  foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "${MPI_RANKS}" 2>&1 | tee log.foamDictionary
+  decomposePar -force 2>&1 | tee log.decomposePar
 fi
 
-if [[ "$CORES" -gt 1 ]]; then
-    mpirun -np "$CORES" foamRun -parallel
-    reconstructPar
-else
-    foamRun
-fi
+mpirun --oversubscribe -np "${MPI_RANKS}" foamRun -parallel 2>&1 | tee log.foamRun
+reconstructPar 2>&1 | tee log.reconstructPar
 '''
     )
-    os.chmod(
-        path,
-        stat.S_IRUSR
-        | stat.S_IWUSR
-        | stat.S_IXUSR
-        | stat.S_IRGRP
-        | stat.S_IXGRP
-        | stat.S_IROTH
-        | stat.S_IXOTH,
-    )
+    os.chmod(path, 0o755)
     return path
 
 

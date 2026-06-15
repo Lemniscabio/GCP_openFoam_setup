@@ -12,6 +12,8 @@ def test_command_sh_resume_aware_and_executable(tmp_path):
     p = Path(write_command_sh(cp, tmp_path / "command.sh"))
     t = p.read_text()
     assert "OF_RESUME" in t
+    assert "MPI_RANKS" in t
+    assert "foamDictionary system/decomposeParDict -entry numberOfSubdomains -set" in t
     for cmd in ["blockMesh", "snappyHexMesh", "topoSet", "foamRun", "reconstructPar"]:
         assert cmd in t, cmd
     assert os.stat(p).st_mode & stat.S_IXUSR  # executable
