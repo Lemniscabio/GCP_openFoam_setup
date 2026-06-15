@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
 const REGION_COLORS = [0xd8d9dc, 0xc7cbd0, 0xdedbd5, 0xc9d3d5, 0xd5d0ca, 0xe1e2e4];
+const OUTER_REGIONS = new Set(["tankwall", "dishedbottom", "liquidsurface"]);
 
 function decodeBase64(value: string) {
   const binary = atob(value);
@@ -23,6 +24,7 @@ function colorForRegion(region: string, index: number) {
 
 export function StlViewer({ stls }: { stls: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isFs, setIsFs] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -48,6 +50,7 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
 
     const loader = new STLLoader();
     const meshes: THREE.Mesh[] = [];
+    const edges: THREE.LineSegments[] = [];
     const model = new THREE.Group();
     model.rotation.x = -Math.PI / 2;
     scene.add(model);
@@ -55,14 +58,44 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     Object.entries(stls).forEach(([region, encoded], index) => {
       const geometry = loader.parse(decodeBase64(encoded));
       geometry.computeVertexNormals();
-      const material = new THREE.MeshStandardMaterial({
-        color: colorForRegion(region, index),
-        metalness: 0.08,
-        roughness: 0.72,
-        side: THREE.DoubleSide,
-      });
+      const normalizedRegion = region.toLowerCase();
+      const isOuter = OUTER_REGIONS.has(normalizedRegion);
+      const isLiquidSurface = normalizedRegion === "liquidsurface";
+      const isImpeller = normalizedRegion.includes("impeller");
+      const material = isOuter
+        ? new THREE.MeshStandardMaterial({
+            color: isLiquidSurface ? 0x9fb4c4 : 0xdfe3e8,
+            metalness: 0.08,
+            roughness: 0.72,
+            transparent: true,
+            opacity: isLiquidSurface ? 0.18 : 0.14,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          })
+        : new THREE.MeshStandardMaterial({
+            color: colorForRegion(region, index),
+            metalness: isImpeller ? 0.28 : 0.08,
+            roughness: 0.72,
+            side: THREE.DoubleSide,
+          });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = region;
+      mesh.renderOrder = isOuter ? 1 : 0;
+
+      if (isOuter) {
+        const edge = new THREE.LineSegments(
+          new THREE.EdgesGeometry(mesh.geometry, 30),
+          new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.5,
+          }),
+        );
+        edge.renderOrder = 1;
+        edges.push(edge);
+        mesh.add(edge);
+      }
+
       meshes.push(mesh);
       model.add(mesh);
     });
@@ -112,6 +145,13 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     resize();
     fitCamera();
 
+    const handleFullscreenChange = () => {
+      setIsFs(document.fullscreenElement === container);
+      resize();
+      fitCamera();
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
     let frame = 0;
     const render = () => {
       controls.update();
@@ -122,8 +162,14 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
 
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
       resizeObserver.disconnect();
       controls.dispose();
+      edges.forEach((edge) => {
+        edge.geometry.dispose();
+        const materials = Array.isArray(edge.material) ? edge.material : [edge.material];
+        materials.forEach((material) => material.dispose());
+      });
       meshes.forEach((mesh) => {
         mesh.geometry.dispose();
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -134,12 +180,34 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     };
   }, [stls]);
 
+  const toggleFullscreen = () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (document.fullscreenElement === container) {
+      void document.exitFullscreen();
+      return;
+    }
+
+    void container.requestFullscreen();
+  };
+
   return (
     <div
       ref={containerRef}
-      className="w-full overflow-hidden rounded-xl border border-white/10"
-      style={{ height: 460, background: "#17191d" }}
+      className="relative w-full overflow-hidden rounded-xl border border-white/10"
+      style={{ height: isFs ? "100%" : 460, background: "#17191d" }}
       aria-label="Generated stirred-tank reactor geometry"
-    />
+    >
+      <div className="pointer-events-none absolute right-3 top-3 z-10">
+        <button
+          type="button"
+          className="pointer-events-auto rounded-md bg-black/60 px-3 py-1.5 text-xs text-white hover:bg-black/75"
+          onClick={toggleFullscreen}
+        >
+          {isFs ? "Exit fullscreen" : "Fullscreen"}
+        </button>
+      </div>
+    </div>
   );
 }
