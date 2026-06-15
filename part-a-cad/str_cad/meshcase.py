@@ -110,10 +110,10 @@ mergePatchPairs ();
 
 def _snappy_hex_mesh_dict(location_in_mesh) -> str:
     geometry = "\n".join(
-        f"""    {name}.stl
+        f"""    {name}
     {{
         type triSurfaceMesh;
-        name {name};
+        file "{name}.stl";
     }}"""
         for name in REGION_NAMES
     )
@@ -216,7 +216,21 @@ def _fv_solution() -> str:
 
 
 def _mesh_quality_dict() -> str:
-    return _foam_header("meshQualityDict") + """#includeEtc "caseDicts/meshQualityDict"
+    return _foam_header("meshQualityDict") + """maxNonOrtho         65;
+maxBoundarySkewness 20;
+maxInternalSkewness 4;
+maxConcave          80;
+minVol              1e-13;
+minTetQuality       1e-15;
+minArea             -1;
+minTwist            0.02;
+minDeterminant      0.001;
+minFaceWeight       0.05;
+minVolRatio         0.01;
+minTriangleTwist    -1;
+nSmoothScale        4;
+errorReduction      0.75;
+relaxed { maxNonOrtho 75; }
 """
 
 
