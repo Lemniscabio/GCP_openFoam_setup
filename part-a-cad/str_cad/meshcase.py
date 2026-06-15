@@ -7,6 +7,8 @@ import shutil
 import trimesh
 
 from .geometry.assembly import REGION_NAMES
+from .geometry.internals import impeller_z_positions
+from .schema import STRParams
 
 
 def _foam_header(object_name: str) -> str:
@@ -35,8 +37,7 @@ def _combined_bounds(surface_paths: list[pathlib.Path]):
 
 def _cell_counts(minimum, maximum) -> tuple[int, int, int]:
     span = maximum - minimum
-    cell_size = float(max(span)) / 30
-    return tuple(max(1, round(float(length) / cell_size)) for length in span)
+    return tuple(max(1, round(float(length) / 0.12)) for length in span)
 
 
 def _format_point(point) -> str:
@@ -108,7 +109,7 @@ mergePatchPairs ();
 """
 
 
-def _snappy_hex_mesh_dict(location_in_mesh) -> str:
+def _snappy_hex_mesh_dict(location_in_mesh, params: STRParams) -> str:
     geometry = "\n".join(
         f"""    {name}
     {{
@@ -117,10 +118,15 @@ def _snappy_hex_mesh_dict(location_in_mesh) -> str:
     }}"""
         for name in REGION_NAMES
     )
+    impeller_positions = impeller_z_positions(params)
+    blade_height = params.impellers.blade_height_m
+    rotor_z_min = min(impeller_positions) - blade_height
+    rotor_z_max = max(impeller_positions) + blade_height
+    rotor_radius = 0.65 * params.impeller_diameter_m
     refinement = "\n".join(
         f"""        {name}
         {{
-            level ({'2 2' if name in {'shaft', 'impellers'} else '1 1'});
+            level ({'2 3' if name in {'shaft', 'impellers', 'baffles'} else '1 1'});
             patchInfo {{ type wall; }}
         }}"""
         for name in REGION_NAMES
@@ -132,6 +138,13 @@ addLayers       false;
 geometry
 {{
 {geometry}
+    rotorColumn
+    {{
+        type searchableCylinder;
+        point1 (0 0 {rotor_z_min:.9g});
+        point2 (0 0 {rotor_z_max:.9g});
+        radius {rotor_radius:.9g};
+    }}
 }}
 
 castellatedMeshControls
@@ -147,7 +160,14 @@ castellatedMeshControls
 {refinement}
     }}
     resolveFeatureAngle 30;
-    refinementRegions   {{}}
+    refinementRegions
+    {{
+        rotorColumn
+        {{
+            mode inside;
+            levels ((1e15 2));
+        }}
+    }}
     locationInMesh      {_format_point(location_in_mesh)};
     allowFreeStandingZoneFaces true;
 }}
@@ -247,9 +267,11 @@ def make_mesh_case(geometry_dir, case_dir) -> pathlib.Path:
         shutil.copy2(source, tri_surface_dir / source.name)
 
     minimum, maximum = _combined_bounds(source_paths)
-    params = json.loads((geometry_dir / "str-params.json").read_text())
-    radius = params["tank"]["diameter_m"] / 2
-    liquid_height = params["liquid"]["height_m"]
+    params = STRParams.model_validate(
+        json.loads((geometry_dir / "str-params.json").read_text())
+    )
+    radius = params.tank.diameter_m / 2
+    liquid_height = params.liquid.height_m
     radial_position = 0.4 * radius
     location_in_mesh = (
         radial_position * math.cos(math.pi / 4),
@@ -262,7 +284,7 @@ def make_mesh_case(geometry_dir, case_dir) -> pathlib.Path:
         "blockMeshDict": _block_mesh_dict(
             minimum, maximum, _cell_counts(minimum, maximum)
         ),
-        "snappyHexMeshDict": _snappy_hex_mesh_dict(location_in_mesh),
+        "snappyHexMeshDict": _snappy_hex_mesh_dict(location_in_mesh, params),
         "fvSchemes": _fv_schemes(),
         "fvSolution": _fv_solution(),
         "meshQualityDict": _mesh_quality_dict(),

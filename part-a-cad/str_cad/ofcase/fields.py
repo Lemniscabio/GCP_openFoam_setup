@@ -60,7 +60,7 @@ def _boundary_field(field: str, cp, region_names, rotating_patches) -> str:
 
 
 def write_initial_fields(
-    cp, region_names, out_dir, rotating_patches=("impellers", "shaft")
+    cp, region_names, out_dir, rotating_patches=("impellers",)
 ) -> pathlib.Path:
     out_dir = pathlib.Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

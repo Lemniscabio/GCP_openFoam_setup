@@ -18,6 +18,12 @@ def test_rotating_walls_use_MRFnoSlip_and_surface_is_slip(tmp_path):
     cp = CaseParams.model_validate({"rpm": 90, "viscosity_m2_s": 1e-6})
     out = write_initial_fields(cp, REGION_NAMES, tmp_path)
     u = Path(out, "U").read_text()
-    assert "MRFnoSlip" in u          # impellers + shaft
-    assert "noSlip" in u             # stationary walls
+    assert """    impellers
+    {
+        type MRFnoSlip;
+    }""" in u
+    assert """    shaft
+    {
+        type noSlip;
+    }""" in u
     assert "slip" in u               # liquidSurface
