@@ -1,0 +1,18 @@
+[project]
+name = "str-cad"
+version = "0.1.0"
+description = "Part A — parametric stirred-tank-reactor (STR) geometry builder (Salome geompy)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    # Geometry is built by Salome geompy (run headless via `salome -t` in a linux/amd64
+    # container) — Salome is NOT a pip dependency. trimesh is used to validate exported STLs.
+    "trimesh>=4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
