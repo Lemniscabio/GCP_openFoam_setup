@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { usePanelVariants } from "@/lib/motion";
 import type { Me } from "@/lib/client";
 
-export type Tab = "upload" | "cases" | "submit" | "status" | "results";
+export type Tab = "generate" | "upload" | "cases" | "submit" | "status" | "results";
 const TABS: { id: Tab; n: string; label: string }[] = [
-  { id: "upload", n: "01", label: "Upload" },
-  { id: "cases", n: "02", label: "Cases" },
-  { id: "submit", n: "03", label: "Submit" },
-  { id: "status", n: "04", label: "Status" },
-  { id: "results", n: "05", label: "Results" },
+  { id: "generate", n: "01", label: "Generate" },
+  { id: "upload", n: "02", label: "Upload" },
+  { id: "cases", n: "03", label: "Cases" },
+  { id: "submit", n: "04", label: "Submit" },
+  { id: "status", n: "05", label: "Status" },
+  { id: "results", n: "06", label: "Results" },
 ];
 
 export function AppShell({

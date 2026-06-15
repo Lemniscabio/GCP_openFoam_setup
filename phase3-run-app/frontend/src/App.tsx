@@ -10,9 +10,10 @@ import { SubmitView } from "./views/SubmitView";
 import { RunsView } from "./views/RunsView";
 import { ResultsView } from "./views/ResultsView";
 import { ProfileView } from "./views/ProfileView";
+import { GenerateView } from "./views/GenerateView";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("upload");
+  const [tab, setTab] = useState<Tab>("generate");
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [view, setView] = useState<"section" | "profile">("section");
@@ -72,6 +73,13 @@ export default function App() {
             <ProfileView me={me} onBack={() => setView("section")} />
           ) : (
             <>
+          {tab === "generate" && (
+            <GenerateView canRun={canRun} onCreated={(project, ids) => {
+              setActiveProject(project);
+              setSelectedCaseIds(ids);
+              setTab("cases");
+            }} />
+          )}
           {tab === "upload" && (
             <UploadView canUpload={canRun} onUploaded={(project, ids) => {
               setActiveProject(project);
