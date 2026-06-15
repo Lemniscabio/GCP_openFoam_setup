@@ -48,7 +48,9 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
 
     const loader = new STLLoader();
     const meshes: THREE.Mesh[] = [];
-    const bounds = new THREE.Box3();
+    const model = new THREE.Group();
+    model.rotation.x = -Math.PI / 2;
+    scene.add(model);
 
     Object.entries(stls).forEach(([region, encoded], index) => {
       const geometry = loader.parse(decodeBase64(encoded));
@@ -60,28 +62,38 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
         side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.rotation.x = -Math.PI / 2;
       mesh.name = region;
       meshes.push(mesh);
-      scene.add(mesh);
-      bounds.expandByObject(mesh);
+      model.add(mesh);
     });
 
-    if (!bounds.isEmpty()) {
-      const center = bounds.getCenter(new THREE.Vector3());
-      const size = bounds.getSize(new THREE.Vector3());
-      const maxDimension = Math.max(size.x, size.y, size.z);
-      const distance = maxDimension / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
-      camera.position.copy(center).add(new THREE.Vector3(distance * 0.85, distance * 0.65, distance * 1.15));
-      camera.near = Math.max(distance / 1000, 0.001);
-      camera.far = distance * 20;
-      camera.updateProjectionMatrix();
-      controls.target.copy(center);
-      controls.update();
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    let fitCamera = () => {};
 
-      const gridSize = Math.max(maxDimension * 1.8, 1);
+    if (!box.isEmpty()) {
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      model.position.sub(center);
+      model.updateMatrixWorld(true);
+      box.setFromObject(model);
+
+      fitCamera = () => {
+        const radius = 0.5 * size.length();
+        const fitH = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
+        const fitW = fitH / Math.min(1, camera.aspect);
+        const distance = 1.25 * Math.max(fitH, fitW);
+        camera.position.set(distance * 0.7, distance * 0.45, distance);
+        camera.near = Math.max(distance / 1000, 0.001);
+        camera.far = distance * 20;
+        camera.updateProjectionMatrix();
+        controls.target.set(0, 0, 0);
+        controls.update();
+      };
+
+      const gridSize = Math.max(size.x, size.z, 1) * 1.8;
       const grid = new THREE.GridHelper(gridSize, 20, 0x4b525d, 0x30353d);
-      grid.position.y = bounds.min.y;
+      grid.position.y = -size.y / 2;
       scene.add(grid);
     }
 
@@ -92,9 +104,13 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
       camera.aspect = width / Math.max(height, 1);
       camera.updateProjectionMatrix();
     };
-    const resizeObserver = new ResizeObserver(resize);
+    const resizeObserver = new ResizeObserver(() => {
+      resize();
+      fitCamera();
+    });
     resizeObserver.observe(container);
     resize();
+    fitCamera();
 
     let frame = 0;
     const render = () => {
