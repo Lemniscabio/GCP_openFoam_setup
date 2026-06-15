@@ -14,6 +14,9 @@ def test_assembly_returns_a_surface_per_region():
     for name, shape in domain.items():
         assert shape.Area() > 0, name
 
+    assert domain["baffles"].Area() > 1.0
+
+
 def test_fluid_domain_internals_are_subtracted():
     from str_cad.geometry.vessel import build_vessel_shell
     p = STRParams.model_validate(_valid())

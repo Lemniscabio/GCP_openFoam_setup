@@ -33,31 +33,39 @@ def build_fluid_domain(p: STRParams) -> dict[str, "cadquery.Shape"]:
 
     height = p.liquid.height_m
     tank_radius = p.tank.diameter_m / 2
-    impeller_radius = p.impeller_diameter_m / 2
+    impeller_diameter = p.impeller_diameter_m
+    impeller_radius = impeller_diameter / 2
     shaft_radius = max(0.03, p.impeller_diameter_m / 20)
     blade_height = p.impellers.blade_height_m
     impeller_heights = impeller_z_positions(p)
-    tolerance = 1e-3 * max(height, p.tank.diameter_m, 1.0)
-    wall_tolerance = max(tolerance, 0.75 * p.baffles.width_m)
+    tolerance = 1e-3 * max(height, 2 * tank_radius, 1.0)
     regions = {name: [] for name in REGION_NAMES}
 
     for face in build_fluid_solid(p).Faces():
         center = face.Center()
         radial_distance = math.hypot(center.x, center.y)
+        geometry_type = face.geomType()
+        is_planar_top = False
 
-        if center.z >= height - tolerance:
+        if geometry_type == "PLANE":
+            try:
+                is_planar_top = abs(face.normalAt().z) > 0.9
+            except Exception:
+                pass
+
+        if is_planar_top and center.z >= height - tolerance:
             region = "liquidSurface"
         elif center.z < -tolerance:
             region = "dishedBottom"
-        elif radial_distance >= tank_radius - wall_tolerance:
-            region = "tankWall"
-        elif radial_distance <= shaft_radius + tolerance:
-            region = "shaft"
         elif radial_distance <= impeller_radius + tolerance and any(
-            abs(center.z - z) <= blade_height + tolerance
+            abs(center.z - z) <= blade_height / 2 + tolerance
             for z in impeller_heights
         ):
             region = "impellers"
+        elif geometry_type == "CYLINDER" and radial_distance <= 2 * shaft_radius:
+            region = "shaft"
+        elif geometry_type == "CYLINDER" and radial_distance >= impeller_diameter:
+            region = "tankWall"
         else:
             region = "baffles"
 
