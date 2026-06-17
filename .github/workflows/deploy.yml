@@ -23,6 +23,9 @@ jobs:
         with: { python-version: "3.12" }
       - name: Backend + runtime tests
         run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+            libgl1 libglib2.0-0 libxrender1 libsm6 libxext6
+          pip install ./part-a-cad
           cd phase3-run-app
           pip install -e ".[dev]" -r requirements-backend.txt
           OF_DEV_NO_IAP=1 pytest -q
