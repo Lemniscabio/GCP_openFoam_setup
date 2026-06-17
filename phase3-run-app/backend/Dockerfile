@@ -11,6 +11,9 @@ RUN npm run build         # -> /fe/dist
 # --- stage 2: backend serving the built SPA ---
 FROM python:3.12-slim
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgl1 libglib2.0-0 libxrender1 libsm6 libxext6 \
+    && rm -rf /var/lib/apt/lists/*
 COPY phase3-run-app/pyproject.toml phase3-run-app/requirements-backend.txt ./
 RUN pip install --no-cache-dir -e . && pip install --no-cache-dir -r requirements-backend.txt
 # Part A/B geometry+case generator package (pulls cadquery, trimesh, google-genai)
