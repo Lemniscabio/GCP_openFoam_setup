@@ -19,6 +19,9 @@ export OF_DEV_NO_IAP=1
 # Use the CURRENT project-aware runtime (deploy.yml pins this). config.py's default is the
 # stale pre-projects 12.0.1, which downloads cases/<id>/ WITHOUT the project segment and fails.
 export OF_IMAGE_URI="${OF_IMAGE_URI:-us-central1-docker.pkg.dev/cfd-lemnisca/openfoam/openfoam:12.0.5}"
+# Pin the GCP project for the Storage/Firestore clients so this app always targets cfd-lemnisca,
+# regardless of `gcloud config`/ADC quota project (which you may switch for other work).
+export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-cfd-lemnisca}"
 export PYTHONPATH=.
 echo "Backend (dev, no-auth) on http://localhost:8000  — Gemini key: $([ -n "$GEMINI_API_KEY" ] && echo set || echo MISSING)"
 exec .venv312/bin/uvicorn backend.main:app --port 8000 --reload
