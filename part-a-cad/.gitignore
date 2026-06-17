@@ -1,7 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-*.egg-info/
 .pytest_cache/
-.venv312/
-.env.local
+out_golden/
+*.egg-info/

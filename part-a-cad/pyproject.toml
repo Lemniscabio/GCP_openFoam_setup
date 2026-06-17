@@ -1,0 +1,25 @@
+[project]
+name = "str-cad"
+version = "0.1.0"
+description = "Part A — parametric stirred-tank-reactor (STR) geometry builder (CadQuery)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    "cadquery>=2.4",
+    "trimesh>=4",  # validate exported STLs (watertight / manifold)
+    "google-genai>=0.3",  # Gemini prompt->STRParams extraction (str_cad/extract.py)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["str_cad*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

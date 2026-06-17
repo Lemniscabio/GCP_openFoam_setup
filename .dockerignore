@@ -1,0 +1,16 @@
+.git
+**/.venv
+**/.venv312
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+**/.DS_Store
+phase3-run-app/frontend/node_modules
+phase3-run-app/frontend/dist
+phase3-run-app/frontend/.vite
+part-a-cad/.venv
+part-a-cad/out_golden
+part-a-cad/.pytest_cache
+docs
+**/.mypy_cache

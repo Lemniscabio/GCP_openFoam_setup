@@ -54,7 +54,7 @@ jobs:
             -f phase3-run-app/backend/Dockerfile \
             -t ${IMAGE}:${{ github.sha }} \
             -t ${IMAGE}:latest \
-            --push phase3-run-app
+            --push .
       - name: Deploy to Cloud Run (public ingress; app-level Google auth)
         run: |
           gcloud run deploy ${SERVICE} \
@@ -63,5 +63,6 @@ jobs:
             --service-account ${BACKEND_SA} \
             --allow-unauthenticated \
             --update-env-vars "^;^OF_OAUTH_CLIENT_ID=${{ vars.OAUTH_CLIENT_ID }};OF_ALLOWED_DOMAIN=${ALLOWED_DOMAIN};OF_IMAGE_URI=${RUNTIME_IMAGE};OF_SEED_ADMINS=kartikey.attri@lemnisca.bio,gaurav.deshmukh@lemnisca.bio" \
+            --update-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
             --timeout=3600 \
             --project ${PROJECT_ID}

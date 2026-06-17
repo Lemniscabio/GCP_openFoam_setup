@@ -1,0 +1,10 @@
+{
+  "family": "stirred_tank_reactor",
+  "tank": {"diameter_m": 2.09, "height_m": 9.6, "bottom": "dished"},
+  "liquid": {"height_m": 6.55},
+  "baffles": {"count": 4, "width_m": 0.167, "height_m": 7.5, "arrangement": "symmetric"},
+  "shaft": {"central": true},
+  "impellers": {"count": 4, "type": "rushton", "blades": 6,
+                "diameter_ratio": 0.3333333333, "blade_height_m": 0.14, "blade_length_m": 0.175,
+                "lowest_clearance_m": 1.12, "inter_impeller_clearance_m": 1.46}
+}
