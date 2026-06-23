@@ -28,6 +28,10 @@ def write_control_dict(
     delta_t=0.001,
     write_interval_s=0.5,
 ) -> pathlib.Path:
+    if cp.run.verify:
+        end_time_s = cp.run.verify_steps * delta_t
+        write_interval_s = end_time_s
+
     contents = _foam_header("controlDict") + f"""application     foamRun;
 solver          multiphaseEuler;
 startFrom       startTime;

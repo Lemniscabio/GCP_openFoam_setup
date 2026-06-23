@@ -14,6 +14,8 @@ class Run(BaseModel):
     end_time: int = 5000
     write_interval: int = 500
     cores: int = 28
+    verify: bool = False
+    verify_steps: int = 5
 
 
 def _default_patch_roles() -> dict[str, str]:
