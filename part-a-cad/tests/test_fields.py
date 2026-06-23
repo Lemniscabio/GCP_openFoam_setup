@@ -24,6 +24,9 @@ def test_rotating_walls_use_MRFnoSlip_and_surface_is_slip(tmp_path):
     }""" in u
     assert """    shaft
     {
-        type noSlip;
+        type rotatingWallVelocity;
+        origin (0 0 0);
+        axis (0 0 1);
+        omega constant 9.42478;
     }""" in u
     assert "slip" in u               # liquidSurface
