@@ -40,9 +40,11 @@ reactor families / physics modes drop in later without rewriting the core.
 
 ## Success criteria (exit objective)
 
-> One representative **single-phase** case AND one representative **two-phase** case each
-> go: `JSON spec → geometry → OpenFOAM case → structurally valid → mesh + run N timesteps
-> green on GCP`, with the existing `singlephase/`/`twophase/` dirs matched as oracles.
+> For **single-phase** AND **two-phase**, the pipeline goes `JSON spec → geometry →
+> OpenFOAM case → structurally valid → mesh + run N timesteps green on GCP`, proven on a
+> **base case plus a couple of variations** per physics type (e.g. 2–3 points across the
+> rpm/nu/fill or gas-flow/phase-frac axes), with the existing `singlephase/`/`twophase/`
+> dirs matched as oracles.
 
 "100% accuracy" is operationalized as:
 1. **Structural validity** — correct OF dict syntax, all required files present, mesh
@@ -50,8 +52,8 @@ reactor families / physics modes drop in later without rewriting the core.
 2. **Runs on-server** — case meshes and advances a few solver timesteps to completion
    with exit 0 on GCP (no local OpenFOAM exists).
 
-Proven on **one case per physics type**; variations (rpm/nu/fill, gas-flow/phase-frac)
-inherit the result.
+Proven on a **base case plus a couple of variations** per physics type; the remaining
+sweep points inherit the result.
 
 ## Input model (3 tiers)
 
@@ -142,10 +144,11 @@ No local OpenFOAM → reuse `phase3-run-app`'s existing Batch path. Verification
   foamRun (N steps) → reconstructPar`.
 - Success = exit 0 + expected log markers (mesh OK, fields read, time advanced).
 - Failures feed back as the error signal codex fixes.
-- Run on one single-phase + one two-phase representative case.
+- Run on one single-phase + one two-phase base case plus a couple of variations each.
 
-**Open item:** confirm target GCP project — active gcloud config is `test-openfoam`
-(`project-688a4c78-…`), but project notes say `cfd-lemnisca`. Resolve before any submission.
+**Target GCP project: `cfd-lemnisca`** (bucket `cfd-lemnisca-cases`, region `us-central1`).
+The active local gcloud config is `test-openfoam` (`project-688a4c78-…`), so the harness
+must explicitly target `cfd-lemnisca` rather than relying on the ambient default.
 
 ## Backlog (ordered)
 
@@ -157,7 +160,7 @@ No local OpenFOAM → reuse `phase3-run-app`'s existing Batch path. Verification
    variations replace the regex sweeper.
 4. **ofcase two-phase** — new writers vs `twophase/` oracle.
 5. **verify/harness** — on-server smoke-run submission + log parsing.
-6. **End-to-end green** — one case per physics verified on-server.
+6. **End-to-end green** — base case + a couple of variations per physics verified on-server.
 
 ## Risks
 
@@ -165,7 +168,8 @@ No local OpenFOAM → reuse `phase3-run-app`'s existing Batch path. Verification
   export + mesh-ability against the authored geometry early (backlog item 2).
 - **Two-phase dict fidelity** — Euler-Euler setup is subtle; grok adversarial review +
   golden diff against `twophase/` mitigates.
-- **GCP project ambiguity** — resolved before first submission (open item above).
+- **GCP project ambiguity** — resolved: verification targets `cfd-lemnisca` explicitly,
+  not the ambient `test-openfoam` config.
 - **On-server verify cost/latency** — kept to smoke runs (few timesteps), one case per
   physics.
 
