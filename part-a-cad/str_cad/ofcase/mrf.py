@@ -23,12 +23,12 @@ def _format_point(point: tuple[float, float, float]) -> str:
 
 def rotor_cylinders(sp: STRParams) -> list[dict]:
     height = sp.impellers.blade_height_m * 1.5
-    diameter = sp.impeller_diameter_m
+    radius = sp.derived()["mrf_rotor_radius_m"]
     return [
         {
             "point1": (0.0, 0.0, z - height / 2),
             "point2": (0.0, 0.0, z + height / 2),
-            "radius": 0.55 * diameter,
+            "radius": radius,
         }
         for z in impeller_z_positions(sp)
     ]
