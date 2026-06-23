@@ -2,12 +2,19 @@ import math
 
 import cadquery as cq
 
+from str_cad.schema import SchemaError
 from str_cad.schema import STRParams
 
 
 def build_vessel_shell(p: STRParams) -> "cadquery.Workplane":
     radius = p.tank.diameter_m / 2
     cylinder = cq.Workplane("XY").circle(radius).extrude(p.liquid.height_m)
+    if p.tank.bottom == "flat":
+        return cylinder
+    if p.tank.bottom != "dished":
+        raise SchemaError(
+            f"unknown tank.bottom {p.tank.bottom!r}; allowed values: 'dished', 'flat'"
+        )
     head = (
         cq.Workplane("XZ")
         .moveTo(0, 0)
