@@ -88,7 +88,7 @@ def _resolved_case_params(spec: Mapping[str, Any], sp: STRParams) -> dict[str, A
     if not isinstance(operating, Mapping):
         raise ValueError("operating must be a mapping when present")
 
-    run_keys = {"cores", "end_time", "write_interval"}
+    run_keys = {"cores", "end_time", "write_interval", "verify", "verify_steps"}
     run = Run.model_validate({key: run_spec[key] for key in run_keys if key in run_spec})
     return {
         "rpm": operating["rpm"],

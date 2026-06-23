@@ -1,9 +1,16 @@
 import copy
 import json
+import re
 from pathlib import Path
 
 from str_cad.variations import expand_variations, generate_sweep
 from tests.test_schema import _valid
+
+
+def _control_value(control_dict: str, key: str) -> str:
+    match = re.search(rf"^{re.escape(key)}\s+([^;]+);", control_dict, re.M)
+    assert match, f"missing controlDict key: {key}"
+    return match.group(1).strip()
 
 
 def test_expand_cartesian():
@@ -75,3 +82,13 @@ def test_sweep_skips_invalid_combo(tmp_path):
     ]
     assert Path(tmp_path, "sweep", "0", "system", "controlDict").exists()
     assert not Path(tmp_path, "sweep", "1").exists()
+
+
+def test_sweep_propagates_verify(tmp_path):
+    base = json.loads(Path("examples/reactor_30kl.json").read_text())
+    base["run"] = {"verify": True, "verify_steps": 5}
+
+    generate_sweep(base, {"operating.rpm": [100]}, tmp_path / "sweep")
+
+    control_dict = (tmp_path / "sweep" / "0" / "system" / "controlDict").read_text()
+    assert _control_value(control_dict, "endTime") == "5"
