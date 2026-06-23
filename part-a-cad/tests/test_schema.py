@@ -88,6 +88,20 @@ def test_two_phase_accepts_sparger_ring_diameter():
     p = STRParams.model_validate(spec)
     assert p.operating.sparger.ring_diameter_m == pytest.approx(0.5)
 
+def test_two_phase_example_validates():
+    spec = json.loads(Path("examples/reactor_twophase.json").read_text())
+    p = STRParams.model_validate(spec)
+    assert p.physics == "two_phase"
+
+def test_two_phase_example_geometry_matches_oracle():
+    spec = json.loads(Path("examples/reactor_twophase.json").read_text())
+    p = STRParams.model_validate(spec)
+
+    assert p.tank.diameter_m == 2.09
+    assert p.liquid.height_m == 6.55
+    assert p.impellers.count == 4
+    assert p.operating.rpm == 100
+
 def test_two_phase_missing_operating_raises():
     spec = _valid()
     spec["physics"] = "two_phase"
