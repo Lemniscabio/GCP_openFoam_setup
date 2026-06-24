@@ -1,6 +1,16 @@
+from pathlib import Path
+
+import pytest
+
 from core.case_records import InMemoryCaseRecordRepository
 from core.cases import CaseRepository
-from core.generate import build_case_local, commit_case, read_region_stls
+from core.generate import (
+    apply_file_overlays,
+    build_case_local,
+    commit_case,
+    read_case_files,
+    read_region_stls,
+)
 from core.storage import InMemoryStorage
 
 
@@ -46,6 +56,29 @@ def test_build_case_local_from_params_creates_openfoam_case(tmp_path):
     assert len(stls) == 6
     assert result["str_params"]["tank"]["diameter_m"] == 2.09
     assert result["case_params"]["rpm"] == 90
+
+
+def test_read_case_files_returns_editable_dicts_without_stls(tmp_path):
+    result = build_case_local(params=GOLDEN_PARAMS, out_dir=tmp_path)
+    files = read_case_files(result["case_dir"])
+    assert "system/controlDict" in files
+    assert "constant/MRFProperties" in files
+    assert "command.sh" in files
+    assert any(k.startswith("0/") for k in files)
+    assert not any(k.startswith("constant/triSurface/") for k in files)  # STLs excluded
+    assert "application" in files["system/controlDict"]
+
+
+def test_apply_file_overlays_overwrites_and_guards(tmp_path):
+    result = build_case_local(params=GOLDEN_PARAMS, out_dir=tmp_path)
+    case_dir = Path(result["case_dir"])
+    apply_file_overlays(case_dir, {"system/controlDict": "EDITED"})
+    assert (case_dir / "system" / "controlDict").read_text() == "EDITED"
+    with pytest.raises(ValueError):
+        apply_file_overlays(case_dir, {"../escape.txt": "x"})   # path traversal
+    with pytest.raises(ValueError):
+        apply_file_overlays(case_dir, {"system/nope": "x"})     # unknown file
+    apply_file_overlays(case_dir, None)  # no-op
 
 
 def test_read_region_stls_returns_six_non_empty_blobs(tmp_path):

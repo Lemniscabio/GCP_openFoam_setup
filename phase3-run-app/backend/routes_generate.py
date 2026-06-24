@@ -19,7 +19,13 @@ from backend.schemas import (
     GeneratePreviewReq,
     GeneratePreviewResp,
 )
-from core.generate import build_case_local, commit_case, read_region_stls
+from core.generate import (
+    apply_file_overlays,
+    build_case_local,
+    commit_case,
+    read_case_files,
+    read_region_stls,
+)
 from core.projects import is_valid_project_name
 
 router = APIRouter()
@@ -50,6 +56,7 @@ def preview(
                 "str_params": result["str_params"],
                 "case_params": result["case_params"],
                 "stls": stls,
+                "files": read_case_files(result["case_dir"]),
             }
     except (SchemaError, CaseParamsError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -75,6 +82,7 @@ def create(
                 case_params=req.case_params,
                 out_dir=out_dir,
             )
+            apply_file_overlays(result["case_dir"], req.files)
             projects.ensure(
                 req.project,
                 user.email,

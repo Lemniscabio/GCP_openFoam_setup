@@ -9,7 +9,7 @@ import { api, type ProjectInfo } from "../lib/client";
 
 type JsonObject = Record<string, any>;
 type Physics = "single_phase" | "two_phase";
-type Preview = { str_params: JsonObject; case_params: JsonObject; stls: Record<string, string> };
+type Preview = { str_params: JsonObject; case_params: JsonObject; stls: Record<string, string>; files: Record<string, string> };
 
 // Geometry inputs common to both physics modes. Optional fields (blade L/H, baffle
 // width) are left blank by default so the backend fills them from correlations (D/4,
@@ -101,6 +101,8 @@ export function GenerateView({
   const [viscosity, setViscosity] = useState("1e-6");
   const [gasVvm, setGasVvm] = useState("0.5");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [caseFiles, setCaseFiles] = useState<Record<string, string>>({});
+  const [selectedFile, setSelectedFile] = useState<string>("");
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [project, setProject] = useState("");
   const [projectMode, setProjectMode] = useState<"existing" | "new">("existing");
@@ -143,6 +145,10 @@ export function GenerateView({
     try {
       const result = await api.generatePreview({ params: buildParams(), case_params: buildCaseParams() });
       setPreview(result);
+      const files = result.files || {};
+      setCaseFiles(files);
+      const keys = Object.keys(files);
+      setSelectedFile(keys.includes("system/controlDict") ? "system/controlDict" : (keys[0] ?? ""));
     } catch (generateError) {
       setError(String(generateError));
       setToast(String(generateError));
@@ -161,6 +167,7 @@ export function GenerateView({
         project: selectedProject,
         params: buildParams(),
         case_params: buildCaseParams(),
+        files: caseFiles,
       });
       setToast(`Case ${result.case_id} created`);
       onCreated(selectedProject, [result.case_id]);
@@ -316,6 +323,41 @@ export function GenerateView({
           <div className="panel">
             <div className="panel-head">
               <div className="ph-num">02</div>
+              <div className="ph-text">
+                <div className="ph-title">Case files</div>
+                <div className="ph-sub">Inspect every generated OpenFOAM file. Edit any of them (solver, schemes, BCs…) — your changes are written into the case on Create.</div>
+              </div>
+            </div>
+            <div className="panel-body">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[240px_1fr]">
+                <div className="flex max-h-96 flex-col gap-0.5 overflow-auto rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs">
+                  {Object.keys(caseFiles).sort().map((path) => (
+                    <button
+                      key={path}
+                      type="button"
+                      title={path}
+                      className={`truncate rounded px-2 py-1 text-left font-mono ${path === selectedFile ? "bg-black/10 font-semibold text-[var(--ink)]" : "text-[var(--ink-2)] hover:bg-black/5"}`}
+                      onClick={() => setSelectedFile(path)}
+                    >
+                      {path}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  className="input w-full font-mono text-xs"
+                  style={{ minHeight: 384, whiteSpace: "pre", overflowWrap: "normal" }}
+                  spellCheck={false}
+                  disabled={!canRun || !selectedFile}
+                  value={selectedFile ? (caseFiles[selectedFile] ?? "") : ""}
+                  onChange={(event) => setCaseFiles((files) => ({ ...files, [selectedFile]: event.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-head">
+              <div className="ph-num">03</div>
               <div className="ph-text">
                 <div className="ph-title">Resolved &amp; derived parameters</div>
                 <div className="ph-sub">Values the generator filled from your spec (correlations applied). Edit the spec above and re-preview to change them.</div>
