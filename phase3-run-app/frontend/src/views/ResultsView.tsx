@@ -8,7 +8,7 @@ import { usePanelVariants } from "@/lib/motion";
 import { api, type ResultFile, type ResultRun } from "../lib/client";
 
 type PendingDownload =
-  | { kind: "single"; label: string; object: string }
+  | { kind: "single"; label: string; object: string; bytes?: number }
   | {
       kind: "archive";
       label: string;
@@ -16,7 +16,12 @@ type PendingDownload =
       job: string;
       caseId?: string;
       fileCount?: number;
+      bytes?: number; // total size if known; undefined = unknown (e.g. whole-run "Download all")
     };
+
+// Show the integrity warning only for genuinely large downloads, or when the size is
+// unknown (e.g. a whole-run archive — likely the big one). ~1.5 GB threshold.
+const LARGE_DOWNLOAD_BYTES = 1.5 * 1024 ** 3;
 
 const runKey = (run: ResultRun) => `${run.project}/${run.codename}`;
 const caseKey = (run: ResultRun, caseId: string) => `${runKey(run)}/${caseId}`;
@@ -105,6 +110,7 @@ export function ResultsView() {
       job: run.codename,
       caseId,
       fileCount: caseFiles.length,
+      bytes: caseFiles.reduce((sum, file) => sum + file.size, 0),
     });
   }
 
@@ -227,6 +233,7 @@ export function ResultsView() {
                                                 kind: "single",
                                                 label: file.name,
                                                 object: objectPath(run, caseId, file.name),
+                                                bytes: file.size,
                                               })}>Download</Button>
                                             </div>
                                           ))}
@@ -266,6 +273,15 @@ export function ResultsView() {
                     ? `${pending.fileCount} file(s) will be packaged into a zip archive.`
                     : "All result files will be packaged into a zip archive."}
               </div>
+              {(pending.bytes === undefined || pending.bytes > LARGE_DOWNLOAD_BYTES) && (
+                <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(180,83,9,0.35)", background: "rgba(245,158,11,0.10)", fontSize: 12, lineHeight: 1.5, color: "#92400e" }}>
+                  ⚠ <b>Large download.</b> Browser downloads aren’t integrity-checked, so a flaky
+                  connection can corrupt a multi-GB file (seen once). Use a stable connection —
+                  and <b>if this file is important and your connection isn’t good, download it
+                  directly from GCS instead</b> (<code>gcloud storage cp</code> verifies the file
+                  automatically).
+                </div>
+              )}
               {busy && (
                 <div className="flex items-center justify-center gap-2 pb-5 text-center text-xs text-[var(--ink-2)]">
                   <Spinner size={16} label="Packaging download" />

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { initGoogleSignIn, tokenStore } from "../lib/auth";
+import { initGoogleSignIn, startSessionKeepAlive, tokenStore } from "../lib/auth";
 import { OAUTH_CLIENT_ID, ALLOWED_DOMAIN } from "../lib/client";
 
 // Shows the Google sign-in prompt until a valid org token is present, then renders children.
@@ -25,20 +25,15 @@ export function SignInGate({ children }: { children: ReactNode }) {
     }
   }, [email]);
 
-  // Auto-return to sign-in when the 60-min session expires (no manual refresh needed).
+  // Keep an active session alive: the Google token is silently re-issued before it
+  // expires while the user is active, so there's no mid-work logout. Only fall back to
+  // the sign-in screen once the token has actually lapsed and renewal couldn't recover it.
   useEffect(() => {
     if (email === null) return;
-    const ms = tokenStore.expiresAt() - Date.now();
-    if (ms <= 0) {
+    return startSessionKeepAlive(() => {
       tokenStore.clear();
       setEmail(null);
-      return;
-    }
-    const t = setTimeout(() => {
-      tokenStore.clear();
-      setEmail(null);
-    }, ms);
-    return () => clearTimeout(t);
+    });
   }, [email]);
 
   const authorized = email === "" || (!!email && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`));
