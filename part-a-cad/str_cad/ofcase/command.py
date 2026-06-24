@@ -45,6 +45,7 @@ if [[ "${OF_RESUME:-0}" != "1" ]]; then
   blockMesh 2>&1 | tee log.blockMesh
   snappyHexMesh -overwrite 2>&1 | tee log.snappyHexMesh
   topoSet 2>&1 | tee log.topoSet
+  createPatch -overwrite 2>&1 | tee log.createPatch
   setFields 2>&1 | tee log.setFields
   foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "${MPI_RANKS}" 2>&1 | tee log.foamDictionary
   decomposePar -force 2>&1 | tee log.decomposePar

@@ -39,9 +39,9 @@ def _patch_block(text, patch_name):
 
 def _write_two_phase_fields(tmp_path):
     schema = json.loads(Path("examples/reactor_twophase.json").read_text())
-    STRParams.model_validate(schema)
+    sp = STRParams.model_validate(schema)
     cp = CaseParams.model_validate({"rpm": 100, "viscosity_m2_s": 1e-6})
-    return write_initial_fields_two_phase(None, cp, REGION_NAMES, tmp_path / "0")
+    return write_initial_fields_two_phase(sp, cp, REGION_NAMES, tmp_path / "0")
 
 
 def test_two_phase_initial_fields_exist_with_headers(tmp_path):
