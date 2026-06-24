@@ -1,4 +1,6 @@
+import copy
 import datetime
+import itertools
 import json
 import os
 from pathlib import Path
@@ -143,6 +145,52 @@ def commit_case(
         )
     )
     return case_id
+
+
+# Geometry-fixed operating axes for variations, and the case files each one controls.
+# A swept axis's controlled files are regenerated per variation with the new value, so
+# they are excluded from the user's edit-overlay (the user shouldn't edit a param they sweep).
+VARIATION_AXES = ("rpm", "viscosity_m2_s", "gas_flow_vvm")
+_AXIS_CONTROLLED_FILES = {
+    "rpm": {"constant/MRFProperties", "0/U", "0/U.liquid", "0/U.gas"},
+    "viscosity_m2_s": {"constant/physicalProperties"},
+    "gas_flow_vvm": {"0/U.gas", "system/setFieldsDict"},
+}
+MAX_VARIATIONS = 25
+
+
+def expand_variation_combos(axes: dict[str, list]) -> list[dict]:
+    """Cartesian product of the variation axes -> a list of {axis: value} combos."""
+    axes = {k: v for k, v in (axes or {}).items() if v}
+    for axis in axes:
+        if axis not in VARIATION_AXES:
+            raise ValueError(f"unknown variation axis: {axis} (allowed: {', '.join(VARIATION_AXES)})")
+    if not axes:
+        return []
+    keys = list(axes.keys())
+    return [dict(zip(keys, combo)) for combo in itertools.product(*(axes[k] for k in keys))]
+
+
+def apply_axis_value(params: dict, case_params: dict, axis: str, value) -> None:
+    """Set one swept axis's value into the spec/case-params (in place)."""
+    if axis == "rpm":
+        params.setdefault("operating", {})["rpm"] = value
+        case_params["rpm"] = value
+    elif axis == "viscosity_m2_s":
+        case_params["viscosity_m2_s"] = value
+    elif axis == "gas_flow_vvm":
+        params.setdefault("operating", {})["gas_flow_vvm"] = value
+    else:
+        raise ValueError(f"unknown variation axis: {axis}")
+
+
+def overlay_minus_swept(files: dict[str, str] | None, axes) -> dict[str, str]:
+    """The user's edits to apply to each variation: everything except files the swept
+    axes regenerate (so the per-variation swept value is preserved)."""
+    if not files:
+        return {}
+    excluded = set().union(*(_AXIS_CONTROLLED_FILES.get(a, set()) for a in axes)) if axes else set()
+    return {rel: content for rel, content in files.items() if rel not in excluded}
 
 
 def _resolve_str_params(params: Any | None) -> STRParams:

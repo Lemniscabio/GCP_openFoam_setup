@@ -39,6 +39,18 @@ class GenerateCreateResp(BaseModel):
     case_id: str
 
 
+class GenerateVariationsReq(BaseModel):
+    project: str
+    params: dict
+    case_params: dict | None = None
+    files: dict[str, str] | None = None     # edited base files, carried into every variation
+    axes: dict[str, list[float]]            # e.g. {"rpm": [50,100], "viscosity_m2_s": [1e-6]}
+
+
+class GenerateVariationsResp(BaseModel):
+    case_ids: list[str]
+
+
 class SubmitReq(BaseModel):
     case_ids: list[str] = Field(min_length=1)
     machine_type: str

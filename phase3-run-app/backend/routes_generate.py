@@ -1,4 +1,5 @@
 import base64
+import copy
 import datetime
 import tempfile
 
@@ -18,11 +19,17 @@ from backend.schemas import (
     GenerateCreateResp,
     GeneratePreviewReq,
     GeneratePreviewResp,
+    GenerateVariationsReq,
+    GenerateVariationsResp,
 )
 from core.generate import (
+    MAX_VARIATIONS,
+    apply_axis_value,
     apply_file_overlays,
     build_case_local,
     commit_case,
+    expand_variation_combos,
+    overlay_minus_swept,
     read_case_files,
     read_region_stls,
 )
@@ -100,3 +107,51 @@ def create(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"case_id": case_id}
+
+
+@router.post("/generate/variations", response_model=GenerateVariationsResp)
+def variations(
+    req: GenerateVariationsReq,
+    account=Depends(require_runner),
+    store=Depends(storage),
+    repo=Depends(case_repo),
+    records=Depends(case_record_repo),
+    projects=Depends(project_repo),
+):
+    user = account[0]
+    if not is_valid_project_name(req.project):
+        raise HTTPException(status_code=400, detail="invalid project name")
+
+    combos = expand_variation_combos(req.axes)
+    if not combos:
+        raise HTTPException(status_code=400, detail="provide at least one variation axis with values")
+    if len(combos) > MAX_VARIATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{len(combos)} variations requested; limit is {MAX_VARIATIONS}",
+        )
+
+    # The user's base-case edits carry into every variation, except files the swept
+    # axes regenerate (those keep their per-variation value).
+    overlay = overlay_minus_swept(req.files, set(req.axes))
+    case_ids: list[str] = []
+    try:
+        projects.ensure(req.project, user.email, datetime.datetime.now(datetime.timezone.utc))
+        for combo in combos:
+            params = copy.deepcopy(req.params)
+            case_params = copy.deepcopy(req.case_params) if req.case_params else {}
+            for axis, value in combo.items():
+                apply_axis_value(params, case_params, axis, value)
+            with tempfile.TemporaryDirectory() as out_dir:
+                result = build_case_local(params=params, case_params=case_params, out_dir=out_dir)
+                apply_file_overlays(result["case_dir"], overlay)
+                case_ids.append(
+                    commit_case(
+                        result["case_dir"], req.project, user.email,
+                        storage=store, case_repo=repo, case_record_repo=records,
+                    )
+                )
+    except (SchemaError, CaseParamsError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"case_ids": case_ids}

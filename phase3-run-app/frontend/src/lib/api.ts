@@ -155,4 +155,7 @@ export class ApiClient {
   generateCreate(body: { project: string; params: unknown; case_params?: unknown; files?: Record<string, string> }): Promise<{ case_id: string }> {
     return this.req("POST", "/api/generate/create", body);
   }
+  generateVariations(body: { project: string; params: unknown; case_params?: unknown; files?: Record<string, string>; axes: Record<string, number[]> }): Promise<{ case_ids: string[] }> {
+    return this.req("POST", "/api/generate/variations", body);
+  }
 }
