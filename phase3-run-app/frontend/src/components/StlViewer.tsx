@@ -46,7 +46,8 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     controls.zoomSpeed = 0.9;
     controls.panSpeed = 0.7;
     controls.screenSpacePanning = true;  // pan in the screen plane (intuitive)
-    controls.zoomToCursor = true;        // zoom toward the cursor, not the center
+    // NOTE: no zoomToCursor — it drifts the orbit target off the model centre, which makes
+    // drag-rotate swing the whole model around instead of revolving it in place.
     controls.enabled = true;
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.8));
@@ -207,10 +208,19 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
       style={{ height: isFs ? "100%" : 460, background: "#17191d" }}
       aria-label="Generated stirred-tank reactor geometry"
     >
+      <div className="pointer-events-none absolute left-3 top-3 z-10">
+        <span
+          className="pointer-events-auto inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border border-white/30 bg-white/15 text-sm font-medium text-white backdrop-blur-sm"
+          title={"Rotate: left-drag (revolves in place)\nZoom: scroll — up = in, down = out\nPan: right-drag, or Shift + left-drag"}
+          aria-label="3D controls help"
+        >
+          ?
+        </span>
+      </div>
       <div className="pointer-events-none absolute right-3 top-3 z-10">
         <button
           type="button"
-          className="pointer-events-auto rounded-md bg-black/60 px-3 py-1.5 text-xs text-white hover:bg-black/75"
+          className="pointer-events-auto rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/25"
           onClick={toggleFullscreen}
         >
           {isFs ? "Exit fullscreen" : "Fullscreen"}

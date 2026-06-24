@@ -188,6 +188,8 @@ export function GenerateView({
   const variationCount = Object.keys(axes).length
     ? Object.values(axes).reduce((acc, list) => acc * list.length, 1)
     : 0;
+  const _axisLabel: Record<string, string> = { rpm: "RPM", viscosity_m2_s: "viscosity", gas_flow_vvm: "gas-flow" };
+  const variationBreakdown = Object.entries(axes).map(([key, list]) => `${list.length} ${_axisLabel[key]}`).join(" × ");
 
   async function createVariations() {
     if (!canRun || !preview || invalidProject || creating || variationCount === 0) return;
@@ -462,16 +464,20 @@ export function GenerateView({
                   Variations (optional) — spin multiple cases from this base
                 </summary>
                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <ParamField label="RPM values (comma-separated)" unit="rpm" type="text" value={varyRpm} disabled={!canRun} onChange={setVaryRpm} />
+                  <ParamField label="RPM values" unit="rpm" type="text" value={varyRpm} disabled={!canRun} placeholder="e.g. 50, 100, 150" onChange={setVaryRpm} />
                   {physics === "single_phase" ? (
-                    <ParamField label="Viscosity values" unit="m²/s" type="text" value={varyVisc} disabled={!canRun} onChange={setVaryVisc} />
+                    <ParamField label="Viscosity values" unit="m²/s" type="text" value={varyVisc} disabled={!canRun} placeholder="e.g. 1e-6, 1e-5" onChange={setVaryVisc} />
                   ) : (
-                    <ParamField label="Gas-flow values" unit="vvm" type="text" value={varyGas} disabled={!canRun} onChange={setVaryGas} />
+                    <ParamField label="Gas-flow values" unit="vvm" type="text" value={varyGas} disabled={!canRun} placeholder="e.g. 0.3, 0.5, 0.8" onChange={setVaryGas} />
                   )}
                 </div>
-                <div className="ph-sub mt-2">
-                  Each list is swept (Cartesian); geometry stays fixed and your edits carry into every case.
-                  {variationCount > 0 && ` Will create ${variationCount} case${variationCount === 1 ? "" : "s"}.`}
+                <div className="mt-2" style={{ fontWeight: 600, color: variationCount > 0 ? "var(--ink)" : "var(--ink-2)" }}>
+                  {variationCount > 0
+                    ? `→ ${variationBreakdown} = ${variationCount} case${variationCount === 1 ? "" : "s"}`
+                    : "Enter one or more comma-separated values per axis to sweep."}
+                </div>
+                <div className="ph-sub mt-1">
+                  Discrete values per axis (like singlephase), combined as a Cartesian product. Geometry stays fixed; your edits carry into every case.
                 </div>
               </details>
 
@@ -510,7 +516,10 @@ function ParamField({ label, unit, type, value, disabled, placeholder, onChange 
 }) {
   return (
     <label className="field">
-      <span className="lbl"><span>{label}</span>{unit && <span>{unit}</span>}</span>
+      <span className="lbl" style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+        <span>{label}</span>
+        {unit && <span style={{ color: "var(--ink-2)", fontWeight: 400 }}>{unit}</span>}
+      </span>
       <input className="input w-full" type={type} step={type === "number" ? "any" : undefined} value={String(value ?? "")} placeholder={placeholder} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
