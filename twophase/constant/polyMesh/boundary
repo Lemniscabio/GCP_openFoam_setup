@@ -1,0 +1,84 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+9
+(
+    Reactor_Wall
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          67506;
+        startFace       3064374;
+    }
+    LiquidLevel
+    {
+        type            patch;
+        inGroups        List<word> 1(patch);
+        nFaces          10538;
+        startFace       3131880;
+    }
+    Baffles
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          15532;
+        startFace       3142418;
+    }
+    Impeller_1
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          18236;
+        startFace       3157950;
+    }
+    Impeller_2
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          18240;
+        startFace       3176186;
+    }
+    Impeller_3
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          18240;
+        startFace       3194426;
+    }
+    Impeller_4
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          18240;
+        startFace       3212666;
+    }
+    Shaft
+    {
+        type            wall;
+        inGroups        List<word> 1(wall);
+        nFaces          4320;
+        startFace       3230906;
+    }
+    Sparger
+    {
+        type            patch;
+        inGroups        List<word> 1(patch);
+        nFaces          4800;
+        startFace       3235226;
+    }
+)
+
+// ************************************************************************* //

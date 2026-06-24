@@ -17,7 +17,6 @@ class FinalizeReq(BaseModel):
 
 
 class GeneratePreviewReq(BaseModel):
-    prompt: str | None = None
     params: dict | None = None
     case_params: dict | None = None
 

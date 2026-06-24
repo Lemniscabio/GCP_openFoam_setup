@@ -3,14 +3,12 @@ import datetime
 import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException
-from google.genai.errors import APIError
 from str_cad.ofcase.caseparams import CaseParamsError
 from str_cad.schema import SchemaError
 
 from backend.deps import (
     case_record_repo,
     case_repo,
-    gemini_api_key,
     project_repo,
     storage,
 )
@@ -31,21 +29,15 @@ router = APIRouter()
 def preview(
     req: GeneratePreviewReq,
     account=Depends(require_runner),
-    gemini_key=Depends(gemini_api_key),
 ):
-    if (req.prompt is None) == (req.params is None):
-        raise HTTPException(
-            status_code=400,
-            detail="exactly one of prompt or params is required",
-        )
+    if req.params is None:
+        raise HTTPException(status_code=400, detail="params is required")
 
     try:
         with tempfile.TemporaryDirectory() as out_dir:
             result = build_case_local(
-                prompt=req.prompt,
                 params=req.params,
                 case_params=req.case_params,
-                gemini_key=gemini_key,
                 out_dir=out_dir,
             )
             stls = {
@@ -59,7 +51,7 @@ def preview(
                 "case_params": result["case_params"],
                 "stls": stls,
             }
-    except (SchemaError, CaseParamsError, APIError, ValueError) as exc:
+    except (SchemaError, CaseParamsError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

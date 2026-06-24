@@ -21,13 +21,11 @@ DEFAULT_OPENFOAM_VERSION = "12"
 
 def build_case_local(
     *,
-    prompt: str | None = None,
     params: Any | None = None,
     case_params: Any | None = None,
-    gemini_key: str | None = None,
     out_dir: str | Path,
 ) -> dict:
-    str_params = _resolve_str_params(prompt, params, gemini_key)
+    str_params = _resolve_str_params(params)
     resolved_case_params = _resolve_case_params(case_params)
     output_dir = Path(out_dir)
     geometry_root = output_dir / "geo"
@@ -109,16 +107,10 @@ def commit_case(
     return case_id
 
 
-def _resolve_str_params(
-    prompt: str | None, params: Any | None, gemini_key: str | None
-) -> STRParams:
-    if prompt:
-        from str_cad.extract import extract_str_params
-
-        return extract_str_params(prompt, api_key=gemini_key)
-    if params is not None:
-        return STRParams.model_validate(params)
-    raise ValueError("prompt or params is required")
+def _resolve_str_params(params: Any | None) -> STRParams:
+    if params is None:
+        raise ValueError("params is required")
+    return STRParams.model_validate(params)
 
 
 def _resolve_case_params(case_params: Any | None) -> CaseParams:

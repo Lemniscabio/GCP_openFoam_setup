@@ -1,0 +1,350 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+castellatedMesh true;
+snap            true;
+addLayers       false;
+
+geometry
+{
+    Reactor_Wall
+    {
+        type triSurfaceMesh;
+        file "Reactor_Wall.stl";
+        scale 1;
+    }
+
+    LiquidLevel
+    {
+        type triSurfaceMesh;
+        file "LiquidLevel.stl";
+        scale 1;    
+    }
+
+    Baffles
+    {
+        type triSurfaceMesh;
+        file "Baffles.stl";
+        scale 1;
+    }
+    Impeller_1
+    {
+        type triSurfaceMesh;
+        file "Impeller_1.stl";
+        scale 1;
+    }
+    Impeller_2
+    {
+        type triSurfaceMesh;
+        file "Impeller_2.stl";
+        scale 1;
+    }
+    Impeller_3
+    {
+        type triSurfaceMesh;
+        file "Impeller_3.stl";
+        scale 1;
+    }
+    Impeller_4
+    {
+        type triSurfaceMesh;
+        file "Impeller_4.stl";
+        scale 1;
+    }
+    Shaft
+    {
+        type triSurfaceMesh;
+        file "Shaft.stl";
+        scale 1;
+    }
+    Rotor_Impeller1
+    {
+        type    searchableCylinder;
+        point1  (0 0 0.724);
+        point2  (0 0 1.250);
+        radius  0.42;
+    }
+    Rotor_Impeller2
+    {
+        type    searchableCylinder;
+        point1  (0 0 2.184);
+        point2  (0 0 2.710);
+        radius  0.42;
+    }
+    Rotor_Impeller3
+    {
+        type    searchableCylinder;
+        point1  (0 0 3.644);
+        point2  (0 0 4.170);
+        radius  0.42;
+    }
+    Rotor_Impeller4
+    {
+        type    searchableCylinder;
+        point1  (0 0 5.104);
+        point2  (0 0 5.630);
+        radius  0.42;
+    }
+}
+
+castellatedMeshControls
+{
+
+    maxLocalCells 1000000;
+
+    maxGlobalCells 2000000;
+
+    minRefinementCells 80;
+
+    nCellsBetweenLevels 2;
+
+    maxLoadUnbalance 0.10;
+
+    features
+    (
+    );
+    
+    refinementSurfaces
+    {
+       Reactor_Wall
+        {
+            level (1 1);   
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+        Baffles
+        {
+            level (1 1);  	
+            patchInfo
+            {
+                type wall;
+            }
+        }
+       
+        LiquidLevel
+        {
+            level (1 1);
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+	Impeller_1
+        {
+            level (2 3);
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+
+	Impeller_2
+        {
+            level (2 3);
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+
+	Impeller_3
+        {
+            level (2 3);
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+
+	Impeller_4
+        {
+            level (2 3);
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+
+        Rotor_Impeller1
+        {
+            level (1 2);
+            cellZone Rotor_Impeller1;
+            faceZone Rotor_Impeller1;
+            cellZoneInside inside;
+        }
+        Rotor_Impeller2
+        {
+            level (1 2);
+            cellZone Rotor_Impeller2;
+            faceZone Rotor_Impeller2;
+            cellZoneInside inside;
+        }
+
+        Rotor_Impeller3
+        {
+            level (1 2);
+            cellZone Rotor_Impeller3;
+            faceZone Rotor_Impeller3;
+            cellZoneInside inside;
+        }
+
+        Rotor_Impeller4
+        {
+            level (1 2);
+            cellZone Rotor_Impeller4;
+            faceZone Rotor_Impeller4;
+            cellZoneInside inside;
+        }
+
+	Shaft
+        {
+            level (1 1);
+            patchInfo
+            {
+                type wall;
+            }
+        }
+
+    } 
+    
+      
+    refinementRegions
+    {
+        Rotor_Impeller1
+        {
+            mode inside;
+            levels ((1 1));   
+            cellZone rotorZone1;
+        }
+
+
+        Rotor_Impeller2
+        {
+            mode inside;
+            levels ((1 1));   
+            cellZone rotorZone1;
+        }
+
+
+        Rotor_Impeller3
+        {
+            mode inside;
+            levels ((1 1));   
+            cellZone rotorZone1;
+        }
+
+
+        Rotor_Impeller4
+        {
+            mode inside;
+            levels ((1 1));   
+            cellZone rotorZone1;
+        }
+
+    }     
+
+    locationInMesh (0.5 0.5 1); // Inside point
+    resolveFeatureAngle 45;
+    allowFreeStandingZoneFaces true;
+}
+
+// Settings for the snapping.
+snapControls
+{
+
+    nSmoothPatch 5;
+
+    tolerance 2.0;
+
+    nSolveIter 80;
+
+    nRelaxIter 10;
+
+    nFeatureSnapIter 15;
+
+    implicitFeatureSnap true;
+
+    explicitFeatureSnap true;
+
+    multiRegionFeatureSnap true;
+}
+
+// Settings for the layer addition.
+addLayersControls
+{
+
+    relativeSizes true;
+
+    layers
+    {
+    }
+
+    expansionRatio 1.0;
+
+    finalLayerThickness 0.3;
+
+    minThickness 0.25;
+
+    nGrow 0;
+
+    featureAngle 30;
+
+    nRelaxIter 5;
+
+    nSmoothSurfaceNormals 1;
+
+    nSmoothNormals 3;
+
+    nSmoothThickness 10;
+
+    maxFaceThicknessRatio 0.5;
+
+    maxThicknessToMedialRatio 0.3;
+
+    minMedianAxisAngle 90;
+
+    nBufferCellsNoExtrude 0;
+
+    nLayerIter 50;
+
+    nRelaxedIter 20;
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+
+    relaxed
+    {
+        maxNonOrtho 75;
+    }
+}
+
+writeFlags
+(
+);
+
+mergeTolerance 1E-6;
+
+// ************************************************************************* //
+

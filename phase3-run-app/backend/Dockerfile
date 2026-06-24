@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY phase3-run-app/pyproject.toml phase3-run-app/requirements-backend.txt ./
 RUN pip install --no-cache-dir -e . && pip install --no-cache-dir -r requirements-backend.txt
-# Part A/B geometry+case generator package (pulls cadquery, trimesh, google-genai)
+# Part A/B geometry+case generator package (pulls cadquery, trimesh)
 COPY part-a-cad ./part-a-cad
 RUN pip install --no-cache-dir ./part-a-cad
 COPY phase3-run-app/core ./core

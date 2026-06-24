@@ -1,0 +1,69 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// MRF rotor cell zones built from cylinder geometry (ROTOR_Z, ROTOR_R).
+// This replaces the STL-derived cellZones from snappyHexMesh which had
+// incorrect z-extents (STL boxes ended ~26 mm below the impeller mid-plane).
+// topoSet is run after createPatch, before decomposePar.
+//
+// Zone geometry (from generate_cases.py constants):
+//   ROTOR_Z = [(0.724, 1.250), (2.184, 2.710), (3.644, 4.170), (5.104, 5.630)]
+//   ROTOR_R = 0.42 m
+// Expected volume per zone: pi * 0.42^2 * 0.526 ≈ 0.292 m^3
+
+actions
+(
+    {
+        name    MRF_Rotor1;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 0.724);
+        point2  (0 0 1.250);
+        radius  0.42;
+    }
+
+    {
+        name    MRF_Rotor2;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 2.184);
+        point2  (0 0 2.710);
+        radius  0.42;
+    }
+
+    {
+        name    MRF_Rotor3;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 3.644);
+        point2  (0 0 4.170);
+        radius  0.42;
+    }
+
+    {
+        name    MRF_Rotor4;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 5.104);
+        point2  (0 0 5.630);
+        radius  0.42;
+    }
+);
+
+// ************************************************************************* //

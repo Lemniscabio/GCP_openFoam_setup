@@ -1,0 +1,98 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+actions
+(
+    // ---------------------------------------------------------------------------
+    // MRF rotor cell zones — replace STL-derived zones (0.300 m tall, WRONG)
+    // with correct cylinderToCell geometry (0.526 m tall, impeller fully inside).
+    // ROTOR_Z = [(0.724,1.250),(2.184,2.710),(3.644,4.170),(5.104,5.630)], R=0.42m
+    // Zone names kept as Rotor_Impeller1..4 so MRFProperties and MRFnoSlip BCs
+    // need no changes. action=new overwrites the existing wrong-sized zones.
+    // ---------------------------------------------------------------------------
+    {
+        name    Rotor_Impeller1;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 0.724);
+        point2  (0 0 1.250);
+        radius  0.42;
+    }
+
+    {
+        name    Rotor_Impeller2;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 2.184);
+        point2  (0 0 2.710);
+        radius  0.42;
+    }
+
+    {
+        name    Rotor_Impeller3;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 3.644);
+        point2  (0 0 4.170);
+        radius  0.42;
+    }
+
+    {
+        name    Rotor_Impeller4;
+        type    cellZoneSet;
+        action  new;
+        source  cylinderToCell;
+        point1  (0 0 5.104);
+        point2  (0 0 5.630);
+        radius  0.42;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Sparger face set (original actions below — unchanged)
+    // ---------------------------------------------------------------------------
+
+    // Select all faces on Reactor_Wall
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  new;
+        source  patchToFace;
+        sourceInfo
+        {
+            patch   Reactor_Wall;
+        }
+    }
+
+    // Keep only faces within the sparger cylinder (disc at tank bottom)
+    // Radius 0.7 m, z from -0.01 to 0.051 m (bottom cap region)
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  subset;
+        source  cylinderToFace;
+        sourceInfo
+        {
+            p1      (0 0 -0.01);
+            p2      (0 0 0.051);
+            radius  0.7;
+        }
+    }
+);
+
+// ************************************************************************* //

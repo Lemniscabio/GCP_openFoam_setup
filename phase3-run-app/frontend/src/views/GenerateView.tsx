@@ -8,24 +8,46 @@ import { usePanelVariants } from "@/lib/motion";
 import { api, type ProjectInfo } from "../lib/client";
 
 type JsonObject = Record<string, any>;
+type Physics = "single_phase" | "two_phase";
 type Preview = { str_params: JsonObject; case_params: JsonObject; stls: Record<string, string> };
 
-const STR_FIELDS = [
+// Geometry inputs common to both physics modes. Optional fields (blade L/H, baffle
+// width) are left blank by default so the backend fills them from correlations (D/4,
+// D/5, T/12). type "opt-number" omits the field entirely when empty.
+const GEOMETRY_FIELDS: [string, string, string, "number" | "opt-number" | "text"][] = [
   ["tank.diameter_m", "Tank diameter", "m", "number"],
   ["tank.height_m", "Tank height", "m", "number"],
   ["liquid.height_m", "Liquid height", "m", "number"],
   ["baffles.count", "Baffle count", "", "number"],
-  ["baffles.width_m", "Baffle width", "m", "number"],
+  ["baffles.width_m", "Baffle width (blank → T/12)", "m", "opt-number"],
   ["baffles.height_m", "Baffle height", "m", "number"],
+  ["baffles.arrangement", "Baffle arrangement", "", "text"],
   ["impellers.count", "Impeller count", "", "number"],
-  ["impellers.type", "Impeller type", "", "text"],
   ["impellers.blades", "Blades per impeller", "", "number"],
-  ["impellers.diameter_ratio", "Diameter ratio", "D", "number"],
-  ["impellers.blade_length_m", "Blade length", "m", "number"],
-  ["impellers.blade_height_m", "Blade height", "m", "number"],
+  ["impellers.diameter_ratio", "Diameter ratio D/T", "", "number"],
+  ["impellers.blade_length_m", "Blade length (blank → D/4)", "m", "opt-number"],
+  ["impellers.blade_height_m", "Blade height (blank → D/5)", "m", "opt-number"],
   ["impellers.lowest_clearance_m", "Lowest clearance", "m", "number"],
   ["impellers.inter_impeller_clearance_m", "Inter-impeller clearance", "m", "number"],
-] as const;
+];
+
+const DEFAULT_SPEC: JsonObject = {
+  family: "stirred_tank_reactor",
+  tank: { diameter_m: 2.09, height_m: 9.6, bottom: "dished" },
+  liquid: { height_m: 6.55 },
+  baffles: { count: 4, width_m: "", height_m: 7.5, arrangement: "symmetric" },
+  shaft: { central: true },
+  impellers: {
+    count: 4,
+    type: "rushton",
+    blades: 6,
+    diameter_ratio: 0.3333333,
+    blade_length_m: "",
+    blade_height_m: "",
+    lowest_clearance_m: 1.12,
+    inter_impeller_clearance_m: 1.46,
+  },
+};
 
 function projectError(project: string) {
   const value = project.trim();
@@ -40,7 +62,7 @@ function valueAt(source: JsonObject, path: string) {
   return path.split(".").reduce<any>((value, key) => value?.[key], source);
 }
 
-function withValue(source: JsonObject, path: string, value: string, numeric: boolean) {
+function withValue(source: JsonObject, path: string, value: unknown) {
   const keys = path.split(".");
   const root = structuredClone(source);
   let target = root;
@@ -48,8 +70,22 @@ function withValue(source: JsonObject, path: string, value: string, numeric: boo
     target[key] = { ...target[key] };
     target = target[key];
   });
-  target[keys[keys.length - 1]] = numeric ? Number(value) : value;
+  target[keys[keys.length - 1]] = value;
   return root;
+}
+
+// Drop "" (blank optional inputs) so the backend applies correlations.
+function prune(value: any): any {
+  if (Array.isArray(value)) return value.map(prune);
+  if (value && typeof value === "object") {
+    const out: JsonObject = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (val === "") continue;
+      out[key] = prune(val);
+    }
+    return out;
+  }
+  return value;
 }
 
 export function GenerateView({
@@ -59,10 +95,12 @@ export function GenerateView({
   canRun: boolean;
   onCreated: (project: string, caseIds: string[]) => void;
 }) {
-  const [prompt, setPrompt] = useState("");
+  const [physics, setPhysics] = useState<Physics>("single_phase");
+  const [spec, setSpec] = useState<JsonObject>(structuredClone(DEFAULT_SPEC));
+  const [rpm, setRpm] = useState("100");
+  const [viscosity, setViscosity] = useState("1e-6");
+  const [gasVvm, setGasVvm] = useState("0.5");
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [strParams, setStrParams] = useState<JsonObject>({});
-  const [caseParams, setCaseParams] = useState<JsonObject>({});
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [project, setProject] = useState("");
   const [projectMode, setProjectMode] = useState<"existing" | "new">("existing");
@@ -85,15 +123,26 @@ export function GenerateView({
     return () => { alive = false; };
   }, []);
 
+  // Assemble the STRParams spec + CaseParams from the form. rpm flows to BOTH
+  // operating.rpm (geometry spec) and case_params.rpm (solver omega).
+  function buildParams() {
+    const operating: JsonObject = { rpm: Number(rpm) };
+    if (physics === "two_phase") operating.gas_flow_vvm = Number(gasVvm);
+    return prune({ ...spec, physics, operating });
+  }
+  function buildCaseParams() {
+    const cp: JsonObject = { rpm: Number(rpm) };
+    if (physics === "single_phase") cp.viscosity_m2_s = Number(viscosity);
+    return cp;
+  }
+
   async function generatePreview() {
-    if (!canRun || !prompt.trim() || previewing) return;
+    if (!canRun || previewing) return;
     setPreviewing(true);
     setError(null);
     try {
-      const result = await api.generatePreview({ prompt: prompt.trim() });
+      const result = await api.generatePreview({ params: buildParams(), case_params: buildCaseParams() });
       setPreview(result);
-      setStrParams(structuredClone(result.str_params));
-      setCaseParams(structuredClone(result.case_params));
     } catch (generateError) {
       setError(String(generateError));
       setToast(String(generateError));
@@ -110,8 +159,8 @@ export function GenerateView({
     try {
       const result = await api.generateCreate({
         project: selectedProject,
-        params: strParams,
-        case_params: caseParams,
+        params: buildParams(),
+        case_params: buildCaseParams(),
       });
       setToast(`Case ${result.case_id} created`);
       onCreated(selectedProject, [result.case_id]);
@@ -123,13 +172,12 @@ export function GenerateView({
     }
   }
 
-  function updateStrParam(path: string, value: string, numeric: boolean) {
-    setStrParams((current) => withValue(current, path, value, numeric));
+  function updateField(path: string, value: unknown) {
+    setSpec((current) => withValue(current, path, value));
+    setPreview(null); // inputs changed — require a fresh preview before create
   }
 
-  function updateCaseParam(path: string, value: string) {
-    setCaseParams((current) => withValue(current, path, value, true));
-  }
+  const resolved = preview?.str_params;
 
   return (
     <motion.div className="step" style={{ gridTemplateColumns: "1fr" }} initial="hidden" animate="visible" exit="exit" variants={panelVariants}>
@@ -138,24 +186,49 @@ export function GenerateView({
           <div className="ph-num">01</div>
           <div className="ph-text">
             <div className="ph-title">Generate a stirred-tank case</div>
-            <div className="ph-sub">Describe the reactor, review the generated geometry and parameters, then create the case.</div>
+            <div className="ph-sub">Fill in the reactor spec, preview the geometry, then create the case.</div>
           </div>
         </div>
         <div className="panel-body">
           {!canRun && <div className="empty-state" style={{ fontStyle: "normal" }}>Your viewer role is read-only. Generation and case creation are disabled.</div>}
+
           <div className="field w-full">
-            <label className="lbl" htmlFor="generate-prompt"><span>Reactor prompt</span></label>
-            <textarea
-              id="generate-prompt"
-              className="input w-full min-h-28 resize-y"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Describe the stirred-tank reactor…"
-              disabled={!canRun || previewing}
-            />
+            <label className="lbl"><span>Physics</span></label>
+            <div className="tabs" role="group" aria-label="Physics mode">
+              <button type="button" className={`tab${physics === "single_phase" ? " on" : ""}`} disabled={!canRun} onClick={() => { setPhysics("single_phase"); setPreview(null); }}>
+                <span>Single-phase</span>
+              </button>
+              <button type="button" className={`tab${physics === "two_phase" ? " on" : ""}`} disabled={!canRun} onClick={() => { setPhysics("two_phase"); setPreview(null); }}>
+                <span>Two-phase (gas–liquid)</span>
+              </button>
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <SelectField label="Tank bottom" value={valueAt(spec, "tank.bottom")} options={["dished", "flat"]} disabled={!canRun} onChange={(v) => updateField("tank.bottom", v)} />
+            <SelectField label="Impeller type" value={valueAt(spec, "impellers.type")} options={["rushton"]} disabled={!canRun} onChange={(v) => updateField("impellers.type", v)} />
+            <CheckboxField label="Central shaft" checked={Boolean(valueAt(spec, "shaft.central"))} disabled={!canRun} onChange={(v) => updateField("shaft.central", v)} />
+            {GEOMETRY_FIELDS.map(([path, label, unit, type]) => (
+              <ParamField
+                key={path}
+                label={label}
+                unit={unit}
+                type={type === "text" ? "text" : "number"}
+                value={valueAt(spec, path)}
+                disabled={!canRun}
+                onChange={(value) => updateField(path, type === "number" || type === "opt-number" ? (value === "" ? "" : Number(value)) : value)}
+              />
+            ))}
+            <ParamField label="RPM" unit="rpm" type="number" value={rpm} disabled={!canRun} onChange={(v) => { setRpm(v); setPreview(null); }} />
+            {physics === "single_phase" ? (
+              <ParamField label="Kinematic viscosity" unit="m²/s" type="number" value={viscosity} disabled={!canRun} onChange={(v) => { setViscosity(v); setPreview(null); }} />
+            ) : (
+              <ParamField label="Gas flow" unit="vvm" type="number" value={gasVvm} disabled={!canRun} onChange={(v) => { setGasVvm(v); setPreview(null); }} />
+            )}
+          </div>
+
           <div className="row-end">
-            <Button disabled={!canRun || !prompt.trim() || previewing} onClick={generatePreview}>
+            <Button disabled={!canRun || previewing} onClick={generatePreview}>
               {previewing && <Spinner size={16} label="Generating preview" />}
               {!canRun ? "Read-only" : previewing ? "Generating…" : "Generate preview"}
             </Button>
@@ -171,7 +244,7 @@ export function GenerateView({
               <div className="ph-num">3D</div>
               <div className="ph-text">
                 <div className="ph-title">Geometry preview</div>
-                <div className="ph-sub">Drag to orbit, scroll to zoom, and right-drag to pan.</div>
+                <div className="ph-sub">Left-drag to orbit · scroll to zoom · right-drag (or shift-drag) to pan.</div>
               </div>
             </div>
             <div className="panel-body"><StlViewer stls={preview.stls} /></div>
@@ -181,36 +254,23 @@ export function GenerateView({
             <div className="panel-head">
               <div className="ph-num">02</div>
               <div className="ph-text">
-                <div className="ph-title">Resolved parameters</div>
-                <div className="ph-sub">Edits below are used directly when the case is created.</div>
+                <div className="ph-title">Resolved &amp; derived parameters</div>
+                <div className="ph-sub">Values the generator filled from your spec (correlations applied). Edit the spec above and re-preview to change them.</div>
               </div>
             </div>
             <div className="panel-body">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {STR_FIELDS.map(([path, label, unit, type]) => (
-                  <ParamField
-                    key={path}
-                    label={label}
-                    unit={unit}
-                    type={type}
-                    value={valueAt(strParams, path)}
-                    disabled={!canRun}
-                    onChange={(value) => updateStrParam(path, value, type === "number")}
-                  />
-                ))}
-                <ParamField label="RPM" unit="rpm" type="number" value={caseParams.rpm} disabled={!canRun} onChange={(value) => updateCaseParam("rpm", value)} />
-                <ParamField label="Kinematic viscosity" unit="m²/s" type="number" value={caseParams.viscosity_m2_s} disabled={!canRun} onChange={(value) => updateCaseParam("viscosity_m2_s", value)} />
+              <div className="grid grid-cols-2 gap-3 text-xs text-[var(--ink-2)] md:grid-cols-4">
+                <ConfigValue label="Physics" value={String(resolved?.physics ?? physics)} />
+                <ConfigValue label="Impeller Ø (D)" value={`${fmt(resolved?.impeller_diameter_m)} m`} />
+                <ConfigValue label="Blade length" value={`${fmt(valueAt(resolved ?? {}, "impellers.blade_length_m"))} m`} />
+                <ConfigValue label="Blade height" value={`${fmt(valueAt(resolved ?? {}, "impellers.blade_height_m"))} m`} />
+                <ConfigValue label="Baffle width" value={`${fmt(valueAt(resolved ?? {}, "baffles.width_m"))} m`} />
+                <ConfigValue label="RPM" value={String(preview.case_params?.rpm ?? "—")} />
+                <ConfigValue label="Solver" value={physics === "two_phase" ? "multiphaseEuler" : "incompressibleFluid"} />
+                <ConfigValue label="Turbulence" value={physics === "two_phase" ? "kEpsilon (liquid) / laminar (gas)" : "kEpsilon"} />
+                {physics === "single_phase" && <ConfigValue label="Viscosity" value={`${preview.case_params?.viscosity_m2_s ?? "—"} m²/s`} />}
+                {physics === "two_phase" && <ConfigValue label="Gas flow" value={`${gasVvm} vvm`} />}
               </div>
-
-              <details className="rounded-xl border border-black/10 bg-black/[0.025] p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-[var(--ink)]">Case config</summary>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-[var(--ink-2)] md:grid-cols-4">
-                  <ConfigValue label="RPM" value={String(caseParams.rpm ?? "—")} />
-                  <ConfigValue label="Viscosity" value={`${caseParams.viscosity_m2_s ?? "—"} m²/s`} />
-                  <ConfigValue label="Turbulence" value="kEpsilon" />
-                  <ConfigValue label="Solver" value="incompressibleFluid" />
-                </div>
-              </details>
 
               <div className="field w-full">
                 <label className="lbl" htmlFor="generate-project"><span>Project</span></label>
@@ -251,6 +311,10 @@ export function GenerateView({
   );
 }
 
+function fmt(value: unknown) {
+  return typeof value === "number" ? value.toFixed(4) : "—";
+}
+
 function ParamField({ label, unit, type, value, disabled, onChange }: {
   label: string;
   unit: string;
@@ -263,6 +327,37 @@ function ParamField({ label, unit, type, value, disabled, onChange }: {
     <label className="field">
       <span className="lbl"><span>{label}</span>{unit && <span>{unit}</span>}</span>
       <input className="input w-full" type={type} step={type === "number" ? "any" : undefined} value={String(value ?? "")} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectField({ label, value, options, disabled, onChange }: {
+  label: string;
+  value: unknown;
+  options: string[];
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="field">
+      <span className="lbl"><span>{label}</span></span>
+      <select className="input w-full" value={String(value ?? "")} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function CheckboxField({ label, checked, disabled, onChange }: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="field">
+      <span className="lbl"><span>{label}</span></span>
+      <input type="checkbox" className="h-5 w-5" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
 }
