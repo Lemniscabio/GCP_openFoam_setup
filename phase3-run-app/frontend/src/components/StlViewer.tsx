@@ -24,8 +24,8 @@ function colorForRegion(region: string, index: number) {
 
 export function StlViewer({ stls }: { stls: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const resetViewRef = useRef<(() => void) | null>(null);
   const [isFs, setIsFs] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -50,15 +50,6 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     // NOTE: no zoomToCursor — it drifts the orbit target off the model centre, which makes
     // drag-rotate swing the whole model around instead of revolving it in place.
     controls.enabled = true;
-
-    // Rotate + zoom only by default (left-drag revolves the model in place around its
-    // centre); pan is opt-in via Shift+left-drag so casual dragging never strands the model.
-    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-    const onModifier = (event: KeyboardEvent) => {
-      controls.mouseButtons.LEFT = event.shiftKey ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
-    };
-    window.addEventListener("keydown", onModifier);
-    window.addEventListener("keyup", onModifier);
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.8));
     const keyLight = new THREE.DirectionalLight(0xffffff, 3.4);
@@ -163,7 +154,6 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     resizeObserver.observe(container);
     resize();
     fitCamera();
-    resetViewRef.current = () => fitCamera();
 
     const handleFullscreenChange = () => {
       setIsFs(document.fullscreenElement === container);
@@ -183,9 +173,6 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      window.removeEventListener("keydown", onModifier);
-      window.removeEventListener("keyup", onModifier);
-      resetViewRef.current = null;
       resizeObserver.disconnect();
       controls.dispose();
       edges.forEach((edge) => {
@@ -223,29 +210,34 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
       aria-label="Generated stirred-tank reactor geometry"
     >
       <div className="pointer-events-none absolute left-3 top-3 z-10">
-        <div className="group pointer-events-auto relative inline-block">
+        <div
+          className="pointer-events-auto relative inline-block"
+          onMouseEnter={() => setShowHelp(true)}
+          onMouseLeave={() => setShowHelp(false)}
+        >
           <span
             className="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border border-white/30 bg-white/15 text-sm font-medium text-white backdrop-blur-sm"
             aria-label="3D controls help"
           >
             ?
           </span>
-          <div className="absolute left-0 top-9 hidden w-max max-w-xs rounded-md border border-white/15 bg-black/85 px-3 py-2 text-xs leading-relaxed text-white shadow-lg group-hover:block">
-            <div><b>Rotate:</b> left-drag (revolves in place)</div>
-            <div><b>Zoom:</b> scroll — up = in, down = out</div>
-            <div><b>Pan:</b> Shift + left-drag</div>
-            <div><b>Reset:</b> the “Reset view” button</div>
-          </div>
+          {showHelp && (
+            <div
+              style={{
+                position: "absolute", left: 0, top: 34, width: "max-content", maxWidth: 280,
+                borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(0,0,0,0.88)",
+                padding: "8px 12px", fontSize: 12, lineHeight: 1.6, color: "#fff",
+                boxShadow: "0 6px 20px rgba(0,0,0,0.4)", zIndex: 20,
+              }}
+            >
+              <div><b>Rotate:</b> left-drag</div>
+              <div><b>Zoom:</b> scroll — up = in, down = out</div>
+              <div><b>Pan:</b> right-drag</div>
+            </div>
+          )}
         </div>
       </div>
-      <div className="pointer-events-none absolute right-3 top-3 z-10 flex gap-2">
-        <button
-          type="button"
-          className="pointer-events-auto rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/25"
-          onClick={() => resetViewRef.current?.()}
-        >
-          Reset view
-        </button>
+      <div className="pointer-events-none absolute right-3 top-3 z-10">
         <button
           type="button"
           className="pointer-events-auto rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/25"
