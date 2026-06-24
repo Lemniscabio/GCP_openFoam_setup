@@ -86,6 +86,23 @@ def test_create_rejects_unknown_overlay_file(client):
     assert response.status_code == 400
 
 
+def test_variations_creates_a_grid(client):
+    response = client.post(
+        "/api/generate/variations",
+        json={"project": "demo", "params": GOLDEN_PARAMS, "axes": {"rpm": [50, 100]}},
+    )
+    assert response.status_code == 200
+    assert len(response.json()["case_ids"]) == 2
+
+
+def test_variations_rejects_no_axes(client):
+    response = client.post(
+        "/api/generate/variations",
+        json={"project": "demo", "params": GOLDEN_PARAMS, "axes": {}},
+    )
+    assert response.status_code == 400
+
+
 def test_preview_rejects_request_without_params(client):
     response = client.post("/api/generate/preview", json={})
 

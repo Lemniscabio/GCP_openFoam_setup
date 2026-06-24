@@ -100,6 +100,9 @@ export function GenerateView({
   const [rpm, setRpm] = useState("100");
   const [viscosity, setViscosity] = useState("1e-6");
   const [gasVvm, setGasVvm] = useState("0.5");
+  const [varyRpm, setVaryRpm] = useState("");
+  const [varyVisc, setVaryVisc] = useState("");
+  const [varyGas, setVaryGas] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [caseFiles, setCaseFiles] = useState<Record<string, string>>({});
   const [selectedFile, setSelectedFile] = useState<string>("");
@@ -154,6 +157,51 @@ export function GenerateView({
       setToast(String(generateError));
     } finally {
       setPreviewing(false);
+    }
+  }
+
+  // Variation axes: comma-separated value lists. Geometry-fixed params only.
+  function parseList(text: string): number[] {
+    return text.split(",").map((x) => x.trim()).filter(Boolean).map(Number).filter((n) => Number.isFinite(n));
+  }
+  function buildAxes(): Record<string, number[]> {
+    const axes: Record<string, number[]> = {};
+    const rpmValues = parseList(varyRpm);
+    if (rpmValues.length) axes.rpm = rpmValues;
+    if (physics === "single_phase") {
+      const v = parseList(varyVisc);
+      if (v.length) axes.viscosity_m2_s = v;
+    } else {
+      const g = parseList(varyGas);
+      if (g.length) axes.gas_flow_vvm = g;
+    }
+    return axes;
+  }
+  const axes = buildAxes();
+  const variationCount = Object.keys(axes).length
+    ? Object.values(axes).reduce((acc, list) => acc * list.length, 1)
+    : 0;
+
+  async function createVariations() {
+    if (!canRun || !preview || invalidProject || creating || variationCount === 0) return;
+    const selectedProject = project.trim();
+    setCreating(true);
+    setError(null);
+    try {
+      const result = await api.generateVariations({
+        project: selectedProject,
+        params: buildParams(),
+        case_params: buildCaseParams(),
+        files: caseFiles,
+        axes,
+      });
+      setToast(`Created ${result.case_ids.length} cases: ${result.case_ids.join(", ")}`);
+      onCreated(selectedProject, result.case_ids);
+    } catch (createError) {
+      setError(String(createError));
+      setToast(String(createError));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -401,11 +449,35 @@ export function GenerateView({
                 )}
                 {invalidProject && <div className="empty-state" style={{ fontStyle: "normal" }}>{invalidProject}</div>}
               </div>
-              <div className="row-end">
+
+              <details className="rounded-xl border border-black/10 bg-black/[0.025] p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-[var(--ink)]">
+                  Variations (optional) — spin multiple cases from this base
+                </summary>
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <ParamField label="RPM values (comma-separated)" unit="rpm" type="text" value={varyRpm} disabled={!canRun} onChange={setVaryRpm} />
+                  {physics === "single_phase" ? (
+                    <ParamField label="Viscosity values" unit="m²/s" type="text" value={varyVisc} disabled={!canRun} onChange={setVaryVisc} />
+                  ) : (
+                    <ParamField label="Gas-flow values" unit="vvm" type="text" value={varyGas} disabled={!canRun} onChange={setVaryGas} />
+                  )}
+                </div>
+                <div className="ph-sub mt-2">
+                  Each list is swept (Cartesian); geometry stays fixed and your edits carry into every case.
+                  {variationCount > 0 && ` Will create ${variationCount} case${variationCount === 1 ? "" : "s"}.`}
+                </div>
+              </details>
+
+              <div className="row-end" style={{ gap: 12 }}>
                 <Button disabled={!canRun || Boolean(invalidProject) || creating} onClick={createCase}>
                   {creating && <Spinner size={16} label="Creating case" />}
                   {!canRun ? "Read-only" : creating ? "Creating…" : "Create case"}
                 </Button>
+                {variationCount > 0 && (
+                  <Button disabled={!canRun || Boolean(invalidProject) || creating} onClick={createVariations}>
+                    {creating ? "Creating…" : `Create ${variationCount} variations`}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

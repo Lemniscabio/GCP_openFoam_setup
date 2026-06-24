@@ -5,9 +5,12 @@ import pytest
 from core.case_records import InMemoryCaseRecordRepository
 from core.cases import CaseRepository
 from core.generate import (
+    apply_axis_value,
     apply_file_overlays,
     build_case_local,
     commit_case,
+    expand_variation_combos,
+    overlay_minus_swept,
     read_case_files,
     read_region_stls,
 )
@@ -79,6 +82,39 @@ def test_apply_file_overlays_overwrites_and_guards(tmp_path):
     with pytest.raises(ValueError):
         apply_file_overlays(case_dir, {"system/nope": "x"})     # unknown file
     apply_file_overlays(case_dir, None)  # no-op
+
+
+def test_expand_variation_combos_cartesian():
+    combos = expand_variation_combos({"rpm": [50, 100], "viscosity_m2_s": [1e-6, 1e-5]})
+    assert len(combos) == 4
+    assert {"rpm": 50, "viscosity_m2_s": 1e-6} in combos
+
+
+def test_expand_variation_combos_rejects_unknown_axis():
+    with pytest.raises(ValueError):
+        expand_variation_combos({"fill": [1, 2]})
+
+
+def test_apply_axis_value_routes_to_fields():
+    params, case_params = {}, {}
+    apply_axis_value(params, case_params, "rpm", 120)
+    assert params["operating"]["rpm"] == 120 and case_params["rpm"] == 120
+    apply_axis_value(params, case_params, "viscosity_m2_s", 1e-5)
+    assert case_params["viscosity_m2_s"] == 1e-5
+    apply_axis_value(params, case_params, "gas_flow_vvm", 0.7)
+    assert params["operating"]["gas_flow_vvm"] == 0.7
+
+
+def test_overlay_minus_swept_excludes_controlled_files():
+    files = {
+        "system/fvSolution": "x",
+        "constant/MRFProperties": "y",
+        "constant/physicalProperties": "z",
+    }
+    out = overlay_minus_swept(files, {"rpm"})
+    assert "system/fvSolution" in out            # carried into variations
+    assert "constant/MRFProperties" not in out   # rpm-controlled -> regenerated per variation
+    assert "constant/physicalProperties" in out  # not rpm-controlled
 
 
 def test_read_region_stls_returns_six_non_empty_blobs(tmp_path):
