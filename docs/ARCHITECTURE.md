@@ -272,8 +272,9 @@ checkpoint/resume, state tracking, results retrieval, auth, and CI/CD. This is t
 hardened part. Project `cfd-lemnisca`, region `us-central1`, bucket `cfd-lemnisca-cases`.
 
 **GCP services:** Cloud Run (web app), Cloud Batch (compute), Cloud Storage (cases/results/checkpoints),
-Firestore (run/case/user/project records), Pub/Sub (Batch job-state events), IAP (auth), Artifact
-Registry (runtime image), Workload Identity Federation (keyless CI). Two entrypoints: the **`of` CLI**
+Firestore (run/case/user/project records), Pub/Sub (Batch job-state events), Google OAuth ID-token +
+hosted-domain (auth), Artifact Registry (runtime image), Workload Identity Federation (keyless CI).
+Two entrypoints: the **`of` CLI**
 (`cli/main.py`) and the **FastAPI web app** (`backend/`) — both sit on the same `core/` library.
 
 ## 3.1 Storage layout (the contract, `core/storage.py`, `uploads.py`, `results_paths.py`)
@@ -374,9 +375,15 @@ Results live in GCS as a tarball + logs. The backend can stream a **zip** of sel
 - **FastAPI** (`main.py`) mounts routers under `/api` (`cases`, `generate`, `jobs`, `me`, `admin`,
   `results`), an unprefixed `/internal` (Pub/Sub push), `/health`, and serves the built SPA from
   `static/`.
-- **Auth = IAP** (`iap.py`): Cloud Run sits behind Identity-Aware Proxy; every request carries an
-  `x-goog-iap-jwt-assertion` which is verified (ES256, Google's IAP public keys, audience/issuer
-  checks) into a `User{email}`. A `OF_DEV_NO_IAP` bypass exists for local dev.
+- **Auth = Google OAuth ID-token + hosted-domain enforcement** (`backend/auth.py`). IAP is **not** used:
+  IAP's domain restriction requires the Cloud Run service to live in an org that owns the domain, and
+  this project's org is not `lemnisca.bio`. Instead the browser does Google Sign-In and sends the
+  resulting **OAuth2 ID token** as `Authorization: Bearer …`; the backend verifies it against
+  `OF_OAUTH_CLIENT_ID` and `user_from_idinfo` enforces `email_verified` **and** that the token's **`hd`
+  (Google Workspace hosted-domain) claim equals `lemnisca.bio`** (`OF_ALLOWED_DOMAIN`). Requiring `hd`
+  is stronger than an email-suffix match — personal/non-Workspace accounts have no `hd` and are rejected
+  outright, so no look-alike address can slip through. A `OF_DEV_NO_IAP` env flag bypasses auth for
+  local dev. (`backend/iap.py` is a dormant alternative IAP-JWT path, not the deployed one.)
 - **RBAC** (`users.py`, `rbac.py`): `of_users` records with roles `admin|runner|viewer` and status
   `pending|active|disabled`. `resolve_on_login` ensures **seed admins** are always admin/active and
   brand-new users land as `pending` (an admin approves them). Routes enforce role.
@@ -398,14 +405,14 @@ Results live in GCS as a tarball + logs. The backend can stream a **zip** of sel
   vitest; on `main`, a `deploy` job authenticates via WIF, builds the multi-stage backend image (SPA
   bundled, tagged by commit SHA), and deploys to Cloud Run.
 
-## 3.9 Known limitations of the GCP layer (from `REVIEW_FINDINGS.md` + code comments)
+## 3.9 Known limitations of the GCP layer
 
-Honest caveats already catalogued: no `maxRunDuration` on Batch jobs (F-003); checkpoint prefix is
-shared per (case, machine) so concurrent runs of the same case could collide (F-002); multi-case runs
-fan out all tasks with no concurrency cap (F-004); default `maxRetryCount 3` reruns *any* solver
-failure, not just preemption (F-006); the stop handler may target the `tee` process group rather than
-the solver's (F-012); runs polling lists every Batch job frequently (F-013). These are operational
-hardening items, not correctness bugs in the generated CFD.
+Honest operational caveats (visible in the code/comments): no `maxRunDuration` on Batch jobs (a job runs
+until done or manually stopped); the checkpoint prefix is shared per (case, machine), so concurrent runs
+of the same case could collide; multi-case runs fan out all tasks with no concurrency cap; the default
+`maxRetryCount 3` reruns *any* solver failure, not just preemption/interruption; the stop handler may
+target the `tee` process group rather than the solver's; and runs-polling lists every Batch job
+frequently. These are operational hardening items, not correctness bugs in the generated CFD.
 
 ---
 
