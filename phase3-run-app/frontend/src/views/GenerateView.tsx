@@ -177,6 +177,60 @@ export function GenerateView({
     setPreview(null); // inputs changed — require a fresh preview before create
   }
 
+  // Live-derived defaults for the optional fields, recomputed as their inputs change.
+  // Shown as greyed placeholder text so the user sees what blank will auto-fill to.
+  const num = (path: string) => Number(valueAt(spec, path));
+  const impellerDia = num("tank.diameter_m") * num("impellers.diameter_ratio"); // D
+  const derivedDefaults: Record<string, number> = {
+    "baffles.width_m": num("tank.diameter_m") / 12,          // T/12
+    "impellers.blade_length_m": impellerDia / 4,             // D/4
+    "impellers.blade_height_m": impellerDia / 5,             // D/5
+  };
+  function placeholderFor(path: string): string | undefined {
+    const v = derivedDefaults[path];
+    return Number.isFinite(v) && v > 0 ? `auto: ${v.toFixed(4)}` : undefined;
+  }
+
+  // Client-side validation mirroring the schema's cross-field rules, so the user gets
+  // immediate feedback instead of a slow backend round-trip / error.
+  function specErrors(): string[] {
+    const errs: string[] = [];
+    const required: [string, string][] = [
+      ["tank.diameter_m", "Tank diameter"], ["tank.height_m", "Tank height"],
+      ["liquid.height_m", "Liquid height"], ["baffles.count", "Baffle count"],
+      ["baffles.height_m", "Baffle height"], ["impellers.count", "Impeller count"],
+      ["impellers.blades", "Blades per impeller"], ["impellers.diameter_ratio", "Diameter ratio"],
+      ["impellers.lowest_clearance_m", "Lowest clearance"],
+      ["impellers.inter_impeller_clearance_m", "Inter-impeller clearance"],
+    ];
+    for (const [path, label] of required) {
+      const v = num(path);
+      if (!Number.isFinite(v) || v <= 0) errs.push(`${label} must be a positive number.`);
+    }
+    if (!Number.isFinite(Number(rpm)) || Number(rpm) < 0) errs.push("RPM must be ≥ 0.");
+    if (physics === "two_phase" && (!Number.isFinite(Number(gasVvm)) || Number(gasVvm) <= 0)) {
+      errs.push("Gas flow (vvm) must be greater than 0 for two-phase.");
+    }
+    const tankH = num("tank.height_m"), liqH = num("liquid.height_m"), r = num("impellers.diameter_ratio");
+    if (Number.isFinite(tankH) && Number.isFinite(liqH) && liqH > tankH) {
+      errs.push("Liquid height must not exceed tank height.");
+    }
+    if (Number.isFinite(r) && (r <= 0 || r > 0.7)) {
+      errs.push("Impeller/tank diameter ratio (D/T) should be between 0 and 0.7.");
+    }
+    const count = num("impellers.count"), lowC = num("impellers.lowest_clearance_m"), interC = num("impellers.inter_impeller_clearance_m");
+    if ([count, lowC, interC, liqH].every(Number.isFinite)) {
+      const highest = lowC + (count - 1) * interC;
+      if (highest >= liqH) errs.push("Impellers don't fit below the liquid (lowest clearance + (count−1)·inter-impeller spacing must be < liquid height).");
+    }
+    return errs;
+  }
+  const errors = specErrors();
+  const warnings: string[] = [];
+  if (num("tank.diameter_m") > 10) {
+    warnings.push("Large vessel (> 10 m): geometry preview and meshing will be slower and heavier.");
+  }
+
   const resolved = preview?.str_params;
 
   return (
@@ -213,6 +267,7 @@ export function GenerateView({
                 unit={unit}
                 type={type === "text" ? "text" : "number"}
                 value={valueAt(spec, path)}
+                placeholder={type === "opt-number" ? placeholderFor(path) : undefined}
                 disabled={!canRun}
                 onChange={(value) => updateField(path, type === "number" || type === "opt-number" ? (value === "" ? "" : Number(value)) : value)}
               />
@@ -225,10 +280,20 @@ export function GenerateView({
             )}
           </div>
 
+          {canRun && errors.length > 0 && (
+            <div className="empty-state" style={{ fontStyle: "normal" }}>
+              {errors.map((message) => <div key={message}>• {message}</div>)}
+            </div>
+          )}
+          {canRun && errors.length === 0 && warnings.length > 0 && (
+            <div className="empty-state" style={{ fontStyle: "normal", opacity: 0.7 }}>
+              {warnings.map((message) => <div key={message}>⚠ {message}</div>)}
+            </div>
+          )}
           <div className="row-end">
-            <Button disabled={!canRun || previewing} onClick={generatePreview}>
+            <Button disabled={!canRun || previewing || errors.length > 0} onClick={generatePreview}>
               {previewing && <Spinner size={16} label="Generating preview" />}
-              {!canRun ? "Read-only" : previewing ? "Generating…" : "Generate preview"}
+              {!canRun ? "Read-only" : previewing ? "Generating…" : errors.length > 0 ? "Fix errors to preview" : "Generate preview"}
             </Button>
           </div>
           {error && <div className="empty-state" style={{ fontStyle: "normal" }}>ERROR: {error}</div>}
@@ -313,18 +378,19 @@ function fmt(value: unknown) {
   return typeof value === "number" ? value.toFixed(4) : "—";
 }
 
-function ParamField({ label, unit, type, value, disabled, onChange }: {
+function ParamField({ label, unit, type, value, disabled, placeholder, onChange }: {
   label: string;
   unit: string;
   type: "number" | "text";
   value: unknown;
   disabled: boolean;
+  placeholder?: string;
   onChange: (value: string) => void;
 }) {
   return (
     <label className="field">
       <span className="lbl"><span>{label}</span>{unit && <span>{unit}</span>}</span>
-      <input className="input w-full" type={type} step={type === "number" ? "any" : undefined} value={String(value ?? "")} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <input className="input w-full" type={type} step={type === "number" ? "any" : undefined} value={String(value ?? "")} placeholder={placeholder} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
