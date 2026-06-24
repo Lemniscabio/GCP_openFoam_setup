@@ -18,10 +18,11 @@ describe("TokenStore", () => {
     s.clear();
     expect(s.get()).toBeNull();
   });
-  it("caps the session at 60 minutes even if the Google exp is longer", () => {
+  it("follows the Google token's own expiry (no artificial cap)", () => {
     const s = new TokenStore();
-    s.set("idtok", Date.now() + 10 * 3600_000, "a@lemnisca.bio"); // 10h google exp
+    const googleExp = Date.now() + 3600_000; // 1h google exp
+    s.set("idtok", googleExp, "a@lemnisca.bio");
     expect(s.get()).toBe("idtok");
-    expect(s.expiresAt()).toBeLessThanOrEqual(Date.now() + 60 * 60_000 + 50);
+    expect(s.expiresAt()).toBe(googleExp);
   });
 });
