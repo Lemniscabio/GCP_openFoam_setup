@@ -193,7 +193,6 @@ export function GenerateView({
           {!canRun && <div className="empty-state" style={{ fontStyle: "normal" }}>Your viewer role is read-only. Generation and case creation are disabled.</div>}
 
           <div className="field w-full">
-            <label className="lbl"><span>Physics</span></label>
             <div className="tabs" role="group" aria-label="Physics mode">
               <button type="button" className={`tab${physics === "single_phase" ? " on" : ""}`} disabled={!canRun} onClick={() => { setPhysics("single_phase"); setPreview(null); }}>
                 <span>Single-phase</span>
@@ -207,7 +206,6 @@ export function GenerateView({
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <SelectField label="Tank bottom" value={valueAt(spec, "tank.bottom")} options={["dished", "flat"]} disabled={!canRun} onChange={(v) => updateField("tank.bottom", v)} />
             <SelectField label="Impeller type" value={valueAt(spec, "impellers.type")} options={["rushton"]} disabled={!canRun} onChange={(v) => updateField("impellers.type", v)} />
-            <CheckboxField label="Central shaft" checked={Boolean(valueAt(spec, "shaft.central"))} disabled={!canRun} onChange={(v) => updateField("shaft.central", v)} />
             {GEOMETRY_FIELDS.map(([path, label, unit, type]) => (
               <ParamField
                 key={path}
@@ -344,20 +342,6 @@ function SelectField({ label, value, options, disabled, onChange }: {
       <select className="input w-full" value={String(value ?? "")} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
-    </label>
-  );
-}
-
-function CheckboxField({ label, checked, disabled, onChange }: {
-  label: string;
-  checked: boolean;
-  disabled: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="field">
-      <span className="lbl"><span>{label}</span></span>
-      <input type="checkbox" className="h-5 w-5" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
 }
