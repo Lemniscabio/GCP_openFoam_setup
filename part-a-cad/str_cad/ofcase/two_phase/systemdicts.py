@@ -1,5 +1,10 @@
 import pathlib
 
+from str_cad.ofcase.mrf import rotor_cylinders
+from str_cad.schema import STRParams
+
+from .geometry import sparger_radius
+
 
 def _foam_header(object_name: str) -> str:
     return f"""FoamFile
@@ -97,15 +102,90 @@ relaxationFactors { equations { ".*" 1; } }
     return _write_dictionary(path, contents)
 
 
-def _seed_radius(sp) -> float:
-    sparger = sp.operating.sparger if sp.operating is not None else None
-    if sparger is not None and sparger.ring_diameter_m is not None:
-        return sparger.ring_diameter_m / 2
-    return 0.67 * sp.tank.diameter_m / 2
+def _format_point(point: tuple[float, float, float]) -> str:
+    return "(" + " ".join(f"{value:.9g}" for value in point) + ")"
+
+
+def write_toposet_dict(sp: STRParams, path) -> pathlib.Path:
+    path = pathlib.Path(path)
+    actions = []
+    for index, cylinder in enumerate(rotor_cylinders(sp)):
+        action = "new" if index == 0 else "add"
+        actions.append(
+            f"""    {{
+        name rotor;
+        type cellSet;
+        action {action};
+        source cylinderToCell;
+        point1 {_format_point(cylinder['point1'])};
+        point2 {_format_point(cylinder['point2'])};
+        radius {cylinder['radius']:.9g};
+    }}"""
+        )
+
+    actions.append(
+        """    {
+        name rotor;
+        type cellZoneSet;
+        action new;
+        source setToCellZone;
+        set rotor;
+    }"""
+    )
+
+    r_sparger = sparger_radius(sp)
+    zmin = -(sp.tank.diameter_m / 2) - 0.05
+    actions.append(
+        f"""    {{
+        name spargerFaces;
+        type faceSet;
+        action new;
+        source patchToFace;
+        sourceInfo
+        {{
+            patch dishedBottom;
+        }}
+    }}"""
+    )
+    actions.append(
+        f"""    {{
+        name spargerFaces;
+        type faceSet;
+        action subset;
+        source cylinderToFace;
+        sourceInfo
+        {{
+            p1 (0 0 {zmin:g});
+            p2 (0 0 0.05);
+            radius {r_sparger:g};
+        }}
+    }}"""
+    )
+
+    contents = _foam_header("topoSetDict") + "actions\n(\n" + "\n".join(actions) + "\n);\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents)
+    return path
+
+
+def write_create_patch_dict(path) -> pathlib.Path:
+    contents = _foam_header("createPatchDict") + """pointSync false;
+
+patches
+(
+    {
+        name            sparger;
+        patchInfo { type patch; }
+        constructFrom   set;
+        set             spargerFaces;
+    }
+);
+"""
+    return _write_dictionary(path, contents)
 
 
 def write_set_fields_dict(sp, path) -> pathlib.Path:
-    radius = _seed_radius(sp)
+    radius = sparger_radius(sp)
     contents = _foam_header("setFieldsDict") + f"""defaultFieldValues
 (
     volScalarFieldValue alpha.gas   0

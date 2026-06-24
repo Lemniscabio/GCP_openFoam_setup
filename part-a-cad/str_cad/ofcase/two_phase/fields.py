@@ -1,5 +1,7 @@
 import pathlib
 
+from .geometry import sparger_inlet_velocity
+
 
 STATIC_WALLS = {"tankWall", "dishedBottom", "baffles"}
 ROTATING_WALL = "shaft"
@@ -127,7 +129,34 @@ def _boundary_condition(field: str, patch_name: str, omega_rad_s: float) -> str:
     return _scalar_condition(field, patch_name)
 
 
-def _boundary_field(field: str, cp, region_names) -> str:
+def _sparger_condition(field: str, u_super: float) -> str:
+    if field == "U.gas":
+        return f"""type fixedValue;
+        value uniform (0 0 {u_super:.5f});"""
+    if field == "U.liquid":
+        return "type fixedValue;\n        value uniform (0 0 0);"
+    if field == "alpha.gas":
+        return "type fixedValue;\n        value uniform 1;"
+    if field == "alpha.liquid":
+        return "type fixedValue;\n        value uniform 0;"
+    if field == "p":
+        return "type calculated;\n        value uniform 0;"
+    if field == "p_rgh":
+        return "type fixedFluxPressure;\n        value uniform 0;"
+    if field == "k.liquid":
+        return "type fixedValue;\n        value uniform 1e-4;"
+    if field == "epsilon.liquid":
+        return "type fixedValue;\n        value uniform 1e-4;"
+    if field == "nut.liquid":
+        return "type calculated;\n        value uniform 0;"
+    if field == "alphat.liquid":
+        return "type calculated;\n        value uniform 0;"
+    if field in {"T.gas", "T.liquid"}:
+        return "type zeroGradient;"
+    raise ValueError(f"unsupported field for sparger: {field}")
+
+
+def _boundary_field(field: str, cp, region_names, u_super: float) -> str:
     entries = []
     for name in region_names:
         condition = _boundary_condition(field, name, cp.omega_rad_s)
@@ -135,19 +164,24 @@ def _boundary_field(field: str, cp, region_names) -> str:
     {{
         {condition}
     }}""")
+    entries.append(f"""    sparger
+    {{
+        {_sparger_condition(field, u_super)}
+    }}""")
     return "boundaryField\n{\n" + "\n".join(entries) + "\n}\n"
 
 
 def write_initial_fields_two_phase(sp, cp, region_names, out_dir) -> pathlib.Path:
     out_dir = pathlib.Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    u_super = sparger_inlet_velocity(sp)
 
     for field, (field_class, dimensions, internal_field) in _FIELD_DEFINITIONS.items():
         contents = _foam_header(field_class, field) + f"""dimensions      {dimensions};
 internalField   {internal_field};
 
 """
-        contents += _boundary_field(field, cp, region_names)
+        contents += _boundary_field(field, cp, region_names, u_super)
         (out_dir / field).write_text(contents)
 
     return out_dir

@@ -4,7 +4,7 @@ import pathlib
 from str_cad.geometry.assembly import REGION_NAMES
 from str_cad.meshcase import make_mesh_case
 from str_cad.ofcase.command import write_metadata_json, write_two_phase_command_sh
-from str_cad.ofcase.mrf import write_mrf_properties, write_toposet_dict
+from str_cad.ofcase.mrf import write_mrf_properties
 from str_cad.ofcase.systemdicts import write_decompose_par
 from str_cad.schema import STRParams
 
@@ -19,9 +19,11 @@ from .physics import (
 )
 from .systemdicts import (
     write_control_dict,
+    write_create_patch_dict,
     write_fv_schemes,
     write_fv_solution,
     write_set_fields_dict,
+    write_toposet_dict,
 )
 
 
@@ -39,6 +41,7 @@ def build_two_phase_case(case_params, geo_dir, out_dir) -> pathlib.Path:
     write_fv_solution(system_dir / "fvSolution")
     write_set_fields_dict(sp, system_dir / "setFieldsDict")
     write_toposet_dict(sp, system_dir / "topoSetDict")
+    write_create_patch_dict(system_dir / "createPatchDict")
     write_decompose_par(case_params, system_dir / "decomposeParDict")
 
     write_phase_properties(sp, constant_dir / "phaseProperties")
