@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,16 @@ export function CasesView({
   const panelVariants = usePanelVariants();
   const listVariants = useListItemVariants();
   const selected = useMemo(() => new Set(selectedCaseIds), [selectedCaseIds]);
+  const firstSelected = selectedCaseIds[0];
+  const selectedRowRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll the just-generated/selected case into view (after the project expands).
+  useEffect(() => {
+    if (!firstSelected || !selectedRowRef.current) return;
+    const id = requestAnimationFrame(() =>
+      selectedRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [firstSelected, cases, expandedProjects]);
   const projects = useMemo(() => {
     const grouped = new Map<string, CaseInfo[]>();
     for (const item of cases) grouped.set(item.project, [...(grouped.get(item.project) ?? []), item]);
@@ -135,7 +145,7 @@ export function CasesView({
                         const isCaseOpen = expandedCases.has(key);
                         const metadataState = metadata[key];
                         return (
-                          <div key={item.case_id} className="grid gap-1">
+                          <div key={item.case_id} className="grid gap-1" ref={item.case_id === firstSelected ? selectedRowRef : undefined}>
                             <div className="stack-item">
                               <input
                                 type="checkbox"
