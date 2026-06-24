@@ -21,15 +21,17 @@ def _write_dictionary(path, contents: str) -> pathlib.Path:
 
 
 def write_control_dict(cp, path) -> pathlib.Path:
+    end_time = cp.run.verify_steps if cp.run.verify else cp.run.end_time
+    write_interval = cp.run.verify_steps if cp.run.verify else cp.run.write_interval
     contents = _foam_header("controlDict") + f"""application     foamRun;
 solver          incompressibleFluid;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-endTime         {cp.run.end_time};
+endTime         {end_time};
 deltaT          1;
 writeControl    timeStep;
-writeInterval   {cp.run.write_interval};
+writeInterval   {write_interval};
 purgeWrite      0;
 writeFormat     ascii;
 writePrecision  6;

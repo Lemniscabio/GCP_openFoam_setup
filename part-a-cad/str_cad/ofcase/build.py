@@ -24,6 +24,10 @@ def build_case(case_params, geo_dir, out_dir) -> pathlib.Path:
     out_dir = pathlib.Path(out_dir)
     schema = json.loads((geo_dir / "str-params.json").read_text())
     sp = STRParams.model_validate(schema)
+    if sp.physics == "two_phase":
+        from .two_phase.build import build_two_phase_case
+
+        return build_two_phase_case(case_params, geo_dir, out_dir)
 
     make_mesh_case(geo_dir, out_dir)
 

@@ -22,7 +22,13 @@ def _foam_header(field_class: str, object_name: str) -> str:
 """
 
 
-def _boundary_condition(field: str, role: str, rotating: bool) -> str:
+def _boundary_condition(
+    field: str,
+    role: str,
+    rotating: bool,
+    rotating_wall: bool,
+    omega_rad_s: float,
+) -> str:
     if role == "slip":
         return {
             "U": "type slip;",
@@ -36,6 +42,11 @@ def _boundary_condition(field: str, role: str, rotating: bool) -> str:
         raise ValueError(f"unsupported patch role: {role}")
 
     if field == "U":
+        if rotating_wall:
+            return f"""type rotatingWallVelocity;
+        origin (0 0 0);
+        axis (0 0 1);
+        omega constant {omega_rad_s:.5f};"""
         return "type MRFnoSlip;" if rotating else "type noSlip;"
 
     return {
@@ -50,7 +61,11 @@ def _boundary_field(field: str, cp, region_names, rotating_patches) -> str:
     entries = []
     for name in region_names:
         condition = _boundary_condition(
-            field, cp.patch_roles[name], name in rotating_patches
+            field,
+            cp.patch_roles[name],
+            name in rotating_patches,
+            field == "U" and name == "shaft",
+            cp.omega_rad_s,
         )
         entries.append(f"""    {name}
     {{
