@@ -1,12 +1,25 @@
-# GCP OpenFOAM Setup
+# Stirred-Tank-Reactor CFD pipeline
 
-OpenFOAM CFD automation on Google Cloud — upload cases, run on Cloud Batch, get results back in GCS.
+End-to-end automation for stirred-tank-reactor CFD: a JSON reactor spec becomes parametric 3D
+geometry, then a complete OpenFOAM case (single-phase or two-phase Euler–Euler), which runs on
+Google Cloud Batch with results/checkpoints in Cloud Storage.
+
+## 📐 Architecture
+
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — the deep, whole-pipeline technical reference,
+in three parts: **CAD/geometry** (CadQuery), **OpenFOAM case generation** (single- + two-phase,
+sparging, variations, verification), and **GCP execution** (Cloud Batch, runtime, state, auth,
+infra). Start here to understand how anything works.
 
 ## What's here
 
 ```
-phase3-run-app/    ← THE ACTIVE SYSTEM — web app + CLI + runtime
+part-a-cad/        ← CAD + OpenFOAM case generator (JSON spec → geometry → case → variations → verify)
+singlephase/       ← reference single-phase case (validation oracle)
+twophase/          ← reference two-phase Euler–Euler case (validation oracle)
+phase3-run-app/    ← GCP run system — web app + CLI + Cloud Batch runtime
 benchmarks/        ← historical machine comparison runs (bench_1.html, bench_2.html, etc)
+docs/              ← architecture, specs, and plans
 .github/workflows/ ← CI/CD (test gate + deploy to Cloud Run on push to main)
 ```
 
@@ -16,7 +29,7 @@ benchmarks/        ← historical machine comparison runs (bench_1.html, bench_2
 quick start, case format, CLI reference, deploy, auth, troubleshooting.
 
 The short version:
-- Web app at `https://of-batch-app-380489820300.us-central1.run.app` — sign in with `@lemnisca.bio`, drag-drop upload, click to run
+- Web app at `https://of-batch-app-380489820300.us-central1.run.app` — sign in with your `@lemnisca.bio` Google Workspace account (auth is Google OAuth ID-token with **hosted-domain (`hd`) enforcement**, not IAP), drag-drop upload, click to run
 - `of` CLI for the same operations from the terminal
 - GCP project: `cfd-lemnisca`, bucket: `cfd-lemnisca-cases`, region: `us-central1`
 - CI deploys on push to `main` via Workload Identity Federation
