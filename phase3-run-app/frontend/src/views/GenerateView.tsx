@@ -106,6 +106,13 @@ export function GenerateView({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [caseFiles, setCaseFiles] = useState<Record<string, string>>({});
   const [selectedFile, setSelectedFile] = useState<string>("");
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const toggleDir = (path: string) =>
+    setExpandedDirs((current) => {
+      const next = new Set(current);
+      next.has(path) ? next.delete(path) : next.add(path);
+      return next;
+    });
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [project, setProject] = useState("");
   const [projectMode, setProjectMode] = useState<"existing" | "new">("existing");
@@ -320,23 +327,23 @@ export function GenerateView({
                 key={path}
                 label={label}
                 unit={unit}
-                type={type === "text" ? "text" : "number"}
+                type="text"
                 value={valueAt(spec, path)}
                 placeholder={type === "opt-number" ? placeholderFor(path) : undefined}
                 disabled={!canRun}
-                onChange={(value) => updateField(path, type === "number" || type === "opt-number" ? (value === "" ? "" : Number(value)) : value)}
+                onChange={(value) => updateField(path, value)}
               />
             ))}
-            <ParamField label="RPM" unit="rpm" type="number" value={rpm} disabled={!canRun} onChange={(v) => { setRpm(v); setPreview(null); }} />
+            <ParamField label="RPM" unit="rpm" type="text" value={rpm} disabled={!canRun} onChange={(v) => { setRpm(v); setPreview(null); }} />
             {physics === "single_phase" ? (
-              <ParamField label="Kinematic viscosity" unit="m²/s" type="number" value={viscosity} disabled={!canRun} onChange={(v) => { setViscosity(v); setPreview(null); }} />
+              <ParamField label="Kinematic viscosity" unit="m²/s" type="text" value={viscosity} disabled={!canRun} onChange={(v) => { setViscosity(v); setPreview(null); }} />
             ) : (
-              <ParamField label="Gas flow" unit="vvm" type="number" value={gasVvm} disabled={!canRun} onChange={(v) => { setGasVvm(v); setPreview(null); }} />
+              <ParamField label="Gas flow" unit="vvm" type="text" value={gasVvm} disabled={!canRun} onChange={(v) => { setGasVvm(v); setPreview(null); }} />
             )}
           </div>
 
           {canRun && errors.length > 0 && (
-            <div className="empty-state" style={{ fontStyle: "normal" }}>
+            <div style={{ color: "#dc2626", fontSize: 13, lineHeight: 1.5 }}>
               {errors.map((message) => <div key={message}>• {message}</div>)}
             </div>
           )}
@@ -351,7 +358,7 @@ export function GenerateView({
               {!canRun ? "Read-only" : previewing ? "Generating…" : errors.length > 0 ? "Fix errors to preview" : "Generate preview"}
             </Button>
           </div>
-          {error && <div className="empty-state" style={{ fontStyle: "normal" }}>ERROR: {error}</div>}
+          {error && <div style={{ color: "#dc2626", fontSize: 13, lineHeight: 1.5 }}>ERROR: {error}</div>}
         </div>
       </div>
 
@@ -378,27 +385,27 @@ export function GenerateView({
             </div>
             <div className="panel-body">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[240px_1fr]">
-                <div className="flex max-h-96 flex-col gap-0.5 overflow-auto rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs">
-                  {Object.keys(caseFiles).sort().map((path) => (
-                    <button
-                      key={path}
-                      type="button"
-                      title={path}
-                      className={`truncate rounded px-2 py-1 text-left font-mono ${path === selectedFile ? "bg-black/10 font-semibold text-[var(--ink)]" : "text-[var(--ink-2)] hover:bg-black/5"}`}
-                      onClick={() => setSelectedFile(path)}
-                    >
-                      {path}
-                    </button>
-                  ))}
+                <div className="max-h-96 overflow-auto rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs">
+                  <FileTree
+                    nodes={buildFileTree(Object.keys(caseFiles))}
+                    depth={0}
+                    expanded={expandedDirs}
+                    selected={selectedFile}
+                    onToggle={toggleDir}
+                    onSelect={setSelectedFile}
+                  />
                 </div>
-                <textarea
-                  className="input w-full font-mono text-xs"
-                  style={{ minHeight: 384, whiteSpace: "pre", overflowWrap: "normal" }}
-                  spellCheck={false}
-                  disabled={!canRun || !selectedFile}
-                  value={selectedFile ? (caseFiles[selectedFile] ?? "") : ""}
-                  onChange={(event) => setCaseFiles((files) => ({ ...files, [selectedFile]: event.target.value }))}
-                />
+                <div className="flex flex-col gap-1">
+                  <div className="truncate font-mono text-xs text-[var(--ink-2)]">{selectedFile || "Select a file from the tree"}</div>
+                  <textarea
+                    className="input w-full font-mono text-xs"
+                    style={{ minHeight: 384, whiteSpace: "pre", overflowWrap: "normal" }}
+                    spellCheck={false}
+                    disabled={!canRun || !selectedFile}
+                    value={selectedFile ? (caseFiles[selectedFile] ?? "") : ""}
+                    onChange={(event) => setCaseFiles((files) => ({ ...files, [selectedFile]: event.target.value }))}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -528,4 +535,66 @@ function SelectField({ label, value, options, disabled, onChange }: {
 
 function ConfigValue({ label, value }: { label: string; value: string }) {
   return <div><div className="font-semibold text-[var(--ink)]">{label}</div><div className="mt-1 font-mono">{value}</div></div>;
+}
+
+// ---- VS Code-style collapsible file tree -------------------------------------
+type TreeNode = { name: string; path: string; isFile: boolean; children: TreeNode[] };
+
+function buildFileTree(paths: string[]): TreeNode[] {
+  const root: TreeNode = { name: "", path: "", isFile: false, children: [] };
+  for (const full of paths) {
+    const parts = full.split("/");
+    let node = root;
+    parts.forEach((part, index) => {
+      const isFile = index === parts.length - 1;
+      const path = parts.slice(0, index + 1).join("/");
+      let child = node.children.find((c) => c.name === part);
+      if (!child) {
+        child = { name: part, path, isFile, children: [] };
+        node.children.push(child);
+      }
+      node = child;
+    });
+  }
+  const sortNode = (node: TreeNode) => {
+    node.children.sort((a, b) => (a.isFile === b.isFile ? a.name.localeCompare(b.name) : a.isFile ? 1 : -1));
+    node.children.forEach(sortNode);
+  };
+  sortNode(root);
+  return root.children;
+}
+
+function FileTree({ nodes, depth, expanded, selected, onToggle, onSelect }: {
+  nodes: TreeNode[];
+  depth: number;
+  expanded: Set<string>;
+  selected: string;
+  onToggle: (path: string) => void;
+  onSelect: (path: string) => void;
+}) {
+  return (
+    <>
+      {nodes.map((node) => (
+        <div key={node.path}>
+          <button
+            type="button"
+            title={node.path}
+            className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left font-mono ${
+              node.isFile && node.path === selected ? "bg-black/10 font-semibold text-[var(--ink)]" : "text-[var(--ink-2)] hover:bg-black/5"
+            }`}
+            style={{ paddingLeft: 6 + depth * 14 }}
+            onClick={() => (node.isFile ? onSelect(node.path) : onToggle(node.path))}
+          >
+            <span className="w-3 shrink-0 text-center">
+              {node.isFile ? "·" : expanded.has(node.path) ? "▾" : "▸"}
+            </span>
+            <span className="truncate">{node.name}{node.isFile ? "" : "/"}</span>
+          </button>
+          {!node.isFile && expanded.has(node.path) && (
+            <FileTree nodes={node.children} depth={depth + 1} expanded={expanded} selected={selected} onToggle={onToggle} onSelect={onSelect} />
+          )}
+        </div>
+      ))}
+    </>
+  );
 }
