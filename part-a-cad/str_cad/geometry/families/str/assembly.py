@@ -45,17 +45,22 @@ def build_fluid_domain(p: STRParams) -> dict[str, "cadquery.Shape"]:
         center = face.Center()
         radial_distance = math.hypot(center.x, center.y)
         geometry_type = face.geomType()
-        is_planar_top = False
+        is_planar_vertical = False
 
         if geometry_type == "PLANE":
             try:
-                is_planar_top = abs(face.normalAt().z) > 0.9
+                is_planar_vertical = abs(face.normalAt().z) > 0.9
             except Exception:
                 pass
 
-        if is_planar_top and center.z >= height - tolerance:
+        if is_planar_vertical and center.z >= height - tolerance:
             region = "liquidSurface"
         elif center.z < -tolerance:
+            region = "dishedBottom"
+        elif is_planar_vertical and center.z <= tolerance:
+            # Flat-bottom disc sits at z~0 (no curved head below 0); it is the
+            # vessel bottom, so group it with dishedBottom (the top was already
+            # handled above; impeller discs sit at z>tolerance).
             region = "dishedBottom"
         elif radial_distance <= impeller_radius + tolerance and any(
             abs(center.z - z) <= blade_height / 2 + tolerance
