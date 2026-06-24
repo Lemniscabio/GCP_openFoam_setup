@@ -24,6 +24,7 @@ function colorForRegion(region: string, index: number) {
 
 export function StlViewer({ stls }: { stls: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const resetViewRef = useRef<(() => void) | null>(null);
   const [isFs, setIsFs] = useState(false);
 
   useEffect(() => {
@@ -49,6 +50,15 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     // NOTE: no zoomToCursor — it drifts the orbit target off the model centre, which makes
     // drag-rotate swing the whole model around instead of revolving it in place.
     controls.enabled = true;
+
+    // Rotate + zoom only by default (left-drag revolves the model in place around its
+    // centre); pan is opt-in via Shift+left-drag so casual dragging never strands the model.
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    const onModifier = (event: KeyboardEvent) => {
+      controls.mouseButtons.LEFT = event.shiftKey ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+    };
+    window.addEventListener("keydown", onModifier);
+    window.addEventListener("keyup", onModifier);
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.8));
     const keyLight = new THREE.DirectionalLight(0xffffff, 3.4);
@@ -153,6 +163,7 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     resizeObserver.observe(container);
     resize();
     fitCamera();
+    resetViewRef.current = () => fitCamera();
 
     const handleFullscreenChange = () => {
       setIsFs(document.fullscreenElement === container);
@@ -172,6 +183,9 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      window.removeEventListener("keydown", onModifier);
+      window.removeEventListener("keyup", onModifier);
+      resetViewRef.current = null;
       resizeObserver.disconnect();
       controls.dispose();
       edges.forEach((edge) => {
@@ -209,15 +223,29 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
       aria-label="Generated stirred-tank reactor geometry"
     >
       <div className="pointer-events-none absolute left-3 top-3 z-10">
-        <span
-          className="pointer-events-auto inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border border-white/30 bg-white/15 text-sm font-medium text-white backdrop-blur-sm"
-          title={"Rotate: left-drag (revolves in place)\nZoom: scroll — up = in, down = out\nPan: right-drag, or Shift + left-drag"}
-          aria-label="3D controls help"
-        >
-          ?
-        </span>
+        <div className="group pointer-events-auto relative inline-block">
+          <span
+            className="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border border-white/30 bg-white/15 text-sm font-medium text-white backdrop-blur-sm"
+            aria-label="3D controls help"
+          >
+            ?
+          </span>
+          <div className="absolute left-0 top-9 hidden w-max max-w-xs rounded-md border border-white/15 bg-black/85 px-3 py-2 text-xs leading-relaxed text-white shadow-lg group-hover:block">
+            <div><b>Rotate:</b> left-drag (revolves in place)</div>
+            <div><b>Zoom:</b> scroll — up = in, down = out</div>
+            <div><b>Pan:</b> Shift + left-drag</div>
+            <div><b>Reset:</b> the “Reset view” button</div>
+          </div>
+        </div>
       </div>
-      <div className="pointer-events-none absolute right-3 top-3 z-10">
+      <div className="pointer-events-none absolute right-3 top-3 z-10 flex gap-2">
+        <button
+          type="button"
+          className="pointer-events-auto rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/25"
+          onClick={() => resetViewRef.current?.()}
+        >
+          Reset view
+        </button>
         <button
           type="button"
           className="pointer-events-auto rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/25"
