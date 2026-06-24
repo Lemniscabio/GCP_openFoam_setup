@@ -23,6 +23,20 @@ docs/              ← architecture, specs, and plans
 .github/workflows/ ← CI/CD (test gate + deploy to Cloud Run on push to main)
 ```
 
+## Reference cases (`singlephase/`, `twophase/`)
+
+These two hand-built OpenFOAM cases are the **ground-truth references this version of the
+generator was built from and validated against**. The parametric generator in `part-a-cad`
+was authored by reading these cases (their dictionaries, fields, MRF setup, and — for
+two-phase — the Euler–Euler `phaseProperties`, `setFields`, and the `topoSet`+`createPatch`
+sparger method), and its output is checked against them by the golden tests in
+`part-a-cad/tests/golden/`. They are kept in the repo as the canonical reference so the
+generator's behaviour can always be traced back to a known-good, expert-authored case.
+
+- `singlephase/` — single-phase MRF stirred tank (template dicts + `generate_cases.py`).
+- `twophase/` — two-phase gas–liquid Euler–Euler case (`multiphaseEuler`, full `0/`,
+  `constant/`, `system/`, and a pre-built `polyMesh`).
+
 ## Active system: Phase 3
 
 **[phase3-run-app/README.md](phase3-run-app/README.md)** — everything you need:
