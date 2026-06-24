@@ -456,7 +456,7 @@ export function GenerateView({
                 ) : (
                   <input id="generate-project" className="input w-full" value={project} onChange={(event) => setProject(event.target.value)} placeholder="Type a new project name" disabled={!canRun} aria-invalid={Boolean(invalidProject)} />
                 )}
-                {invalidProject && <div className="empty-state" style={{ fontStyle: "normal" }}>{invalidProject}</div>}
+                {invalidProject && <div style={{ color: "#dc2626", fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>{invalidProject}</div>}
               </div>
 
               <details className="rounded-xl border border-black/10 bg-black/[0.025] p-4">
