@@ -1,7 +1,5 @@
 import base64
 
-from backend import deps
-
 
 GOLDEN_PARAMS = {
     "family": "stirred_tank_reactor",
@@ -28,8 +26,6 @@ GOLDEN_PARAMS = {
 
 
 def test_preview_from_params_returns_resolved_params_and_six_stls(client):
-    client.app.dependency_overrides[deps.gemini_api_key] = lambda: None
-
     response = client.post(
         "/api/generate/preview",
         json={"params": GOLDEN_PARAMS},
@@ -57,7 +53,7 @@ def test_create_commits_case_to_injected_repository(client, mem_case_records):
     assert record.uploaded_by == "dev@lemnisca.bio"
 
 
-def test_preview_rejects_request_without_prompt_or_params(client):
+def test_preview_rejects_request_without_params(client):
     response = client.post("/api/generate/preview", json={})
 
     assert response.status_code == 400

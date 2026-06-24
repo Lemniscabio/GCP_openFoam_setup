@@ -1,0 +1,79 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p_rgh;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -2 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    Reactor_Wall
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    LiquidLevel
+    {
+        type            prghPressure;
+        p               uniform 0;
+        value           uniform 0;
+    }
+
+    Baffles
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    Impeller_1
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    Impeller_2
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    Impeller_3
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    Impeller_4
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    Shaft
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+
+    Sparger
+    {
+        type            fixedFluxPressure;
+        value           uniform 0;
+    }
+}
+
+// ************************************************************************* //

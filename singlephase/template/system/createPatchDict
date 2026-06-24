@@ -1,0 +1,36 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      createPatchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// The blockMesh 'top' face (at z = maxZ = h_fill) IS the liquid level.
+// No LiquidLevel.stl is needed; this dict renames 'top' → 'LiquidLevel'
+// and sets it to symmetry type so it matches the 0/ field BCs.
+//
+// Run after snappyHexMesh, before decomposePar.
+
+pointSync   false;
+clearEmpty  true;
+
+patches
+(
+    {
+        name        LiquidLevel;
+        patchInfo   { type symmetry; }
+        constructFrom patches;
+        patches     (top);
+    }
+);
+
+// ************************************************************************* //

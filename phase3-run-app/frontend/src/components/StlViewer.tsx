@@ -41,7 +41,13 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
+    controls.dampingFactor = 0.12;       // smooth, settles quickly
+    controls.rotateSpeed = 0.9;
+    controls.zoomSpeed = 0.9;
+    controls.panSpeed = 0.7;
+    controls.screenSpacePanning = true;  // pan in the screen plane (intuitive)
+    controls.zoomToCursor = true;        // zoom toward the cursor, not the center
+    controls.enabled = true;
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.8));
     const keyLight = new THREE.DirectionalLight(0xffffff, 3.4);
@@ -121,6 +127,8 @@ export function StlViewer({ stls }: { stls: Record<string, string> }) {
         camera.far = distance * 20;
         camera.updateProjectionMatrix();
         controls.target.set(0, 0, 0);
+        controls.minDistance = Math.max(radius * 0.25, camera.near * 2);
+        controls.maxDistance = distance * 8;
         controls.update();
       };
 

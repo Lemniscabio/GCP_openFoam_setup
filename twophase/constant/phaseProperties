@@ -1,0 +1,104 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      phaseProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+type basicMultiphaseSystem;
+
+phases (gas liquid);
+
+gas
+{
+    type            pureIsothermalPhaseModel;
+    diameterModel   constant;
+    constantCoeffs
+    {
+        d               3e-3;
+    }
+    residualAlpha   1e-6;
+}
+
+liquid
+{
+    type            pureIsothermalPhaseModel;
+    diameterModel   constant;
+    constantCoeffs
+    {
+        d               1e-2;
+    }
+    residualAlpha   1e-6;
+}
+
+blending
+{
+    default
+    {
+        type                continuous;
+        phase               liquid;
+    }
+}
+
+surfaceTension
+{
+    gas_liquid
+    {
+        type            constant;
+        sigma           0.072;
+    }
+}
+
+interfaceCompression
+{
+    gas_liquid      0;
+}
+
+drag
+{
+    gas_dispersedIn_liquid
+    {
+        type            SchillerNaumann;
+    }
+}
+
+virtualMass
+{
+    gas_dispersedIn_liquid
+    {
+        type            constantCoefficient;
+        Cvm             0.5;
+    }
+}
+
+heatTransfer
+{}
+
+phaseTransfer
+{}
+
+lift
+{}
+
+wallLubrication
+{}
+
+turbulentDispersion
+{
+    gas_dispersedIn_liquid
+    {
+        type            Burns;
+        sigma           0.9;
+    }
+}
+
+// ************************************************************************* //

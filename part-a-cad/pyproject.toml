@@ -7,7 +7,6 @@ dependencies = [
     "pydantic>=2",
     "cadquery>=2.4",
     "trimesh>=4",  # validate exported STLs (watertight / manifold)
-    "google-genai>=0.3",  # Gemini prompt->STRParams extraction (str_cad/extract.py)
 ]
 
 [project.optional-dependencies]

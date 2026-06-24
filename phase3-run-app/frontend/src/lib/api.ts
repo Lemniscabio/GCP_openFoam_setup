@@ -144,7 +144,7 @@ export class ApiClient {
   setUser(email: string, body: { role?: string; status?: string }): Promise<ManagedUser> {
     return this.req("POST", `/api/admin/users/${encodeURIComponent(email)}`, body);
   }
-  generatePreview(body: { prompt?: string; params?: unknown; case_params?: unknown }): Promise<{
+  generatePreview(body: { params: unknown; case_params?: unknown }): Promise<{
     str_params: any;
     case_params: any;
     stls: Record<string, string>;

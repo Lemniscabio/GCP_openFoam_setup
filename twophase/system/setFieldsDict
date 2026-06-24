@@ -1,0 +1,43 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Seed a thin gas-rich zone directly above the sparger disc to avoid a
+// hard alpha.gas=0 → 1 step on the first MULES iteration.
+// Cylinder matches the sparger geometry (R=0.7m) and extends 0.2m above it.
+
+defaultFieldValues
+(
+    volScalarFieldValue alpha.gas   0
+    volScalarFieldValue alpha.liquid 1
+);
+
+regions
+(
+    cylinderToCell
+    {
+        p1      (0 0 0.0);
+        p2      (0 0 0.2);
+        radius  0.7;
+
+        fieldValues
+        (
+            volScalarFieldValue alpha.gas    0.05
+            volScalarFieldValue alpha.liquid 0.95
+        );
+    }
+);
+
+// ************************************************************************* //

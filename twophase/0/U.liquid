@@ -1,0 +1,78 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U.liquid;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    Reactor_Wall
+    {
+        type            noSlip;
+    }
+
+    LiquidLevel
+    {
+        type            pressureInletOutletVelocity;
+        value           uniform (0 0 0);
+    }
+
+    Baffles
+    {
+        type            noSlip;
+    }
+
+    Impeller_1
+    {
+        type            MRFnoSlip;
+        MRFZoneName     Rotor_Impeller1;
+    }
+
+    Impeller_2
+    {
+        type            MRFnoSlip;
+        MRFZoneName     Rotor_Impeller2;
+    }
+
+    Impeller_3
+    {
+        type            MRFnoSlip;
+        MRFZoneName     Rotor_Impeller3;
+    }
+
+    Impeller_4
+    {
+        type            MRFnoSlip;
+        MRFZoneName     Rotor_Impeller4;
+    }
+
+    Shaft
+    {
+        type            rotatingWallVelocity;
+        origin          (0 0 0);
+        axis            (0 0 1);
+        omega           constant 10.47198;
+    }
+
+    Sparger
+    {
+        type            fixedValue;
+        value           uniform (0 0 0);
+    }
+}
+
+// ************************************************************************* //

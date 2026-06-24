@@ -1,0 +1,71 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  7  
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      MRFProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+Rotor_Impeller1
+{
+    cellZone    MRF_Rotor1;    // set by topoSet from ROTOR_Z[0], ROTOR_R
+    active      yes;
+
+    // Fixed patches (by default they 'move' with the MRF zone)
+    nonRotatingPatches ();
+
+    origin      (0 0 0);
+    axis        (0 0 1);
+    omega       100 [rpm];
+}
+
+Rotor_Impeller2
+{
+    cellZone    MRF_Rotor2;    // set by topoSet from ROTOR_Z[1], ROTOR_R
+    active      yes;
+
+    // Fixed patches (by default they 'move' with the MRF zone)
+    nonRotatingPatches ();
+
+    origin      (0 0 0);
+    axis        (0 0 1);
+    omega       100 [rpm];
+}
+
+Rotor_Impeller3
+{
+    cellZone    MRF_Rotor3;    // set by topoSet from ROTOR_Z[2], ROTOR_R
+    active      yes;
+
+    // Fixed patches (by default they 'move' with the MRF zone)
+    nonRotatingPatches ();
+
+    origin      (0 0 0);
+    axis        (0 0 1);
+    omega       100 [rpm];
+}
+
+
+Rotor_Impeller4
+{
+    cellZone    MRF_Rotor4;    // set by topoSet from ROTOR_Z[3], ROTOR_R
+    active      yes;
+
+    // Fixed patches (by default they 'move' with the MRF zone)
+    nonRotatingPatches ();
+
+    origin      (0 0 0);
+    axis        (0 0 1);
+    omega       100 [rpm];
+}
+
+// ************************************************************************* //
