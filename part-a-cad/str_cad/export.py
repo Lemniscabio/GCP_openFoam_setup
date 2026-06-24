@@ -9,19 +9,12 @@ from .schema import STRParams
 
 
 def _export_region(shape: cq.Shape, path: pathlib.Path) -> None:
-    # Linear (chordal) deflection scaled with the region size. A fixed absolute
-    # tolerance makes curved surfaces (e.g. a dished bottom) explode into millions
-    # of triangles on large vessels — a 20 m tank produced a 24 MB STL in ~40 s,
-    # which times out the web preview. Scaling keeps the triangle budget roughly
-    # constant with size; the floor keeps small vessels at the original fidelity.
-    bbox = shape.BoundingBox()
-    size = max(bbox.xlen, bbox.ylen, bbox.zlen, 1.0)
-    # Floor 1e-4 keeps small/reference vessels (size <= ~10 m) at the original fidelity
-    # (watertight), so only larger vessels are coarsened.
-    tolerance = min(max(size * 1e-5, 1e-4), 5e-3)
+    # Fixed high-fidelity tessellation at every vessel size (no size-based coarsening).
+    # Large vessels therefore produce large STLs; the web backend is provisioned with
+    # enough memory to handle them (see phase3-run-app deploy: Cloud Run memory/cpu).
     shape.exportStl(
         str(path),
-        tolerance=tolerance,
+        tolerance=1e-4,
         angularTolerance=0.1,
         relative=False,
         parallel=False,
