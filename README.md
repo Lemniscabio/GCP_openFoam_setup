@@ -15,27 +15,25 @@ infra). Start here to understand how anything works.
 
 ```
 part-a-cad/        ← CAD + OpenFOAM case generator (JSON spec → geometry → case → variations → verify)
-singlephase/       ← reference single-phase case (validation oracle)
-twophase/          ← reference two-phase Euler–Euler case (validation oracle)
+references/        ← reference cases (singlephase, twophase) + recipe to add a new case type
 phase3-run-app/    ← GCP run system — web app + CLI + Cloud Batch runtime
 benchmarks/        ← historical machine comparison runs (bench_1.html, bench_2.html, etc)
 docs/              ← architecture, specs, and plans
 .github/workflows/ ← CI/CD (test gate + deploy to Cloud Run on push to main)
 ```
 
-## Reference cases (`singlephase/`, `twophase/`)
+## Reference cases (`references/`)
 
-These two hand-built OpenFOAM cases are the **ground-truth references this version of the
-generator was built from and validated against**. The parametric generator in `part-a-cad`
-was authored by reading these cases (their dictionaries, fields, MRF setup, and — for
-two-phase — the Euler–Euler `phaseProperties`, `setFields`, and the `topoSet`+`createPatch`
-sparger method), and its output is checked against them by the golden tests in
-`part-a-cad/tests/golden/`. They are kept in the repo as the canonical reference so the
-generator's behaviour can always be traced back to a known-good, expert-authored case.
+`references/singlephase/` and `references/twophase/` are the **ground-truth references this
+version of the generator was built from and validated against**. The parametric generator
+in `part-a-cad` was authored by reading these cases (their dictionaries, fields, MRF setup,
+and — for two-phase — the Euler–Euler `phaseProperties`, `setFields`, and the
+`topoSet`+`createPatch` sparger method), and its output is checked against them by the
+golden tests in `part-a-cad/tests/golden/`.
 
-- `singlephase/` — single-phase MRF stirred tank (template dicts + `generate_cases.py`).
-- `twophase/` — two-phase gas–liquid Euler–Euler case (`multiphaseEuler`, full `0/`,
-  `constant/`, `system/`, and a pre-built `polyMesh`).
+**[`references/README.md`](references/README.md)** also documents the step-by-step recipe to
+**add a new case type** (new reactor family or physics mode) — geometry registry, OF-case
+writers, variation params, golden tests.
 
 ## Active system: Phase 3
 

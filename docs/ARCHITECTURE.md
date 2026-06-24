@@ -136,8 +136,9 @@ Generates the meshing half of the OpenFOAM case from the STLs (this is shared by
 
 **Job:** from the geometry + an operating point, write **every** OpenFOAM dictionary so the case runs,
 choosing the physics (single-phase RANS MRF, or two-phase Euler–Euler), plus a `command.sh` that runs
-the full pipeline. Validated against the hand-built `singlephase/` and `twophase/` reference cases
-("golden oracles"). Target solver: **OpenFOAM 12** (`foamRun` with selectable solver modules).
+the full pipeline. Validated against the hand-built `references/singlephase/` and
+`references/twophase/` reference cases ("golden oracles"). Target solver: **OpenFOAM 12**
+(`foamRun` with selectable solver modules).
 
 ## 2.1 Operating point (`ofcase/caseparams.py`)
 
