@@ -148,10 +148,11 @@ export class ApiClient {
     str_params: any;
     case_params: any;
     stls: Record<string, string>;
+    files: Record<string, string>;
   }> {
     return this.req("POST", "/api/generate/preview", body);
   }
-  generateCreate(body: { project: string; params: unknown; case_params?: unknown }): Promise<{ case_id: string }> {
+  generateCreate(body: { project: string; params: unknown; case_params?: unknown; files?: Record<string, string> }): Promise<{ case_id: string }> {
     return this.req("POST", "/api/generate/create", body);
   }
 }

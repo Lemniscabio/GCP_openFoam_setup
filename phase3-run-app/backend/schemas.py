@@ -25,12 +25,14 @@ class GeneratePreviewResp(BaseModel):
     str_params: dict
     case_params: dict
     stls: dict[str, str]
+    files: dict[str, str] = {}  # generated OpenFOAM text files (relpath -> content)
 
 
 class GenerateCreateReq(BaseModel):
     project: str
     params: dict
     case_params: dict | None = None
+    files: dict[str, str] | None = None  # user-edited file overlays applied before commit
 
 
 class GenerateCreateResp(BaseModel):

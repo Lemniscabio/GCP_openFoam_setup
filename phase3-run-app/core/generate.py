@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,43 @@ def build_case_local(
         "case_dir": case_dir,
         "geometry_dir": geometry_root / "geometry",
     }
+
+
+def read_case_files(case_dir: str | Path) -> dict[str, str]:
+    """Return every editable (text) file in the generated case, keyed by relative path.
+
+    Skips the binary geometry STLs under constant/triSurface (shown in the 3D viewer
+    instead) and anything else that is not UTF-8 text.
+    """
+    case_dir = Path(case_dir)
+    files: dict[str, str] = {}
+    for path in sorted(p for p in case_dir.rglob("*") if p.is_file()):
+        rel = path.relative_to(case_dir).as_posix()
+        if rel.startswith("constant/triSurface/"):
+            continue
+        try:
+            files[rel] = path.read_text()
+        except UnicodeDecodeError:
+            continue  # skip any non-text artifact
+    return files
+
+
+def apply_file_overlays(case_dir: str | Path, files: dict[str, str] | None) -> None:
+    """Overwrite generated case files with user-edited contents.
+
+    Only files that already exist in the generated case may be overlaid (prevents
+    injecting arbitrary paths); each target is confined to case_dir (path-traversal guard).
+    """
+    if not files:
+        return
+    root = Path(case_dir).resolve()
+    for rel, content in files.items():
+        target = (root / rel).resolve()
+        if os.path.commonpath([str(root), str(target)]) != str(root):
+            raise ValueError(f"invalid file path: {rel}")
+        if not target.is_file():
+            raise ValueError(f"unknown case file: {rel}")
+        target.write_text(content)
 
 
 def read_region_stls(geometry_dir: str | Path) -> dict[str, bytes]:

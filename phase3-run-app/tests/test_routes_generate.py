@@ -53,6 +53,39 @@ def test_create_commits_case_to_injected_repository(client, mem_case_records):
     assert record.uploaded_by == "dev@lemnisca.bio"
 
 
+def test_preview_returns_editable_case_files(client):
+    response = client.post("/api/generate/preview", json={"params": GOLDEN_PARAMS})
+    assert response.status_code == 200
+    files = response.json()["files"]
+    assert "system/controlDict" in files
+    assert "constant/MRFProperties" in files
+    assert not any(key.startswith("constant/triSurface/") for key in files)
+
+
+def test_create_applies_file_overlays(client):
+    response = client.post(
+        "/api/generate/create",
+        json={
+            "project": "demo",
+            "params": GOLDEN_PARAMS,
+            "files": {"system/controlDict": "EDITED BY TEST"},
+        },
+    )
+    assert response.status_code == 200
+
+
+def test_create_rejects_unknown_overlay_file(client):
+    response = client.post(
+        "/api/generate/create",
+        json={
+            "project": "demo",
+            "params": GOLDEN_PARAMS,
+            "files": {"system/doesNotExist": "x"},
+        },
+    )
+    assert response.status_code == 400
+
+
 def test_preview_rejects_request_without_params(client):
     response = client.post("/api/generate/preview", json={})
 
