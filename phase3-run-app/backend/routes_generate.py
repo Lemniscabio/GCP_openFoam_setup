@@ -10,6 +10,7 @@ from str_cad.schema import SchemaError
 from backend.deps import (
     case_record_repo,
     case_repo,
+    gemini_api_key,
     project_repo,
     storage,
 )
@@ -21,7 +22,10 @@ from backend.schemas import (
     GeneratePreviewResp,
     GenerateVariationsReq,
     GenerateVariationsResp,
+    GeometryChatReq,
+    GeometryChatResp,
 )
+from core.geometry_chat import run_geometry_chat
 from core.generate import (
     MAX_VARIATIONS,
     apply_axis_value,
@@ -36,6 +40,30 @@ from core.generate import (
 from core.projects import is_valid_project_name
 
 router = APIRouter()
+
+
+@router.post("/generate/chat", response_model=GeometryChatResp)
+def geometry_chat(
+    req: GeometryChatReq,
+    account=Depends(require_runner),
+    api_key=Depends(gemini_api_key),
+):
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Geometry chat is unavailable (no model key configured). Use “Do it manually”.",
+        )
+    try:
+        result = run_geometry_chat(
+            [m.model_dump() for m in req.messages],
+            api_key=api_key,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface model/network failures to the chat UI
+        raise HTTPException(
+            status_code=502,
+            detail=f"Geometry chat failed: {exc}. Try again, or use “Do it manually”.",
+        ) from exc
+    return result
 
 
 @router.post("/generate/preview", response_model=GeneratePreviewResp)

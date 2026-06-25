@@ -4,6 +4,23 @@ End-to-end automation for stirred-tank-reactor CFD: a JSON reactor spec becomes 
 geometry, then a complete OpenFOAM case (single-phase or two-phase Euler–Euler), which runs on
 Google Cloud Batch with results/checkpoints in Cloud Storage.
 
+## Creating geometry: chat or form
+
+In the web app's **Generate** tab you create a reactor geometry either by **chatting** with an
+assistant (describe the reactor in plain language; it asks for anything missing, then builds it)
+or by switching to **"Do it manually"** for the structured form. Both produce the same validated
+`STRParams` spec and feed the identical preview → inspect/edit case files → create / variations
+flow. The assistant only fills the geometry spec — it never computes physics or geometry; the
+deterministic generator does that, and the spec is validated against the real schema before
+anything is built (so it can't hand off an invalid spec).
+
+**Known limitation (intentional):** the assistant asks for the full geometry — it does **not**
+infer dimensions from a target volume (e.g. "make a 100 kL reactor"). A volume underdetermines the
+geometry (any diameter/height/impeller layout can hit the same volume), so it asks for the actual
+dimensions rather than guessing. (It *can* report the volume of a spec it already has.) Inferring a
+full geometry from a volume via standard stirred-tank design heuristics is a possible future
+enhancement, deliberately not enabled.
+
 ## 📐 Architecture
 
 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — the deep, whole-pipeline technical reference,

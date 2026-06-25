@@ -144,6 +144,12 @@ export class ApiClient {
   setUser(email: string, body: { role?: string; status?: string }): Promise<ManagedUser> {
     return this.req("POST", `/api/admin/users/${encodeURIComponent(email)}`, body);
   }
+  generateChat(body: { messages: { role: string; content: string }[] }): Promise<{
+    reply: string;
+    spec: Record<string, any> | null;
+  }> {
+    return this.req("POST", "/api/generate/chat", body);
+  }
   generatePreview(body: { params: unknown; case_params?: unknown }): Promise<{
     str_params: any;
     case_params: any;

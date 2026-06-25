@@ -16,6 +16,20 @@ class FinalizeReq(BaseModel):
     project: str
 
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "model"
+    content: str
+
+
+class GeometryChatReq(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1)
+
+
+class GeometryChatResp(BaseModel):
+    reply: str
+    spec: dict | None = None  # non-null when a complete, validated spec is ready
+
+
 class GeneratePreviewReq(BaseModel):
     params: dict | None = None
     case_params: dict | None = None

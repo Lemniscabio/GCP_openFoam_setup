@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 import google.auth
@@ -20,6 +21,10 @@ from core.users import FirestoreUserRepository
 @lru_cache
 def settings() -> Settings:
     return Settings()
+
+
+def gemini_api_key() -> str | None:
+    return os.environ.get("GEMINI_API_KEY")
 
 
 @lru_cache

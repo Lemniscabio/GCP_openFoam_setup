@@ -53,6 +53,29 @@ def test_create_commits_case_to_injected_repository(client, mem_case_records):
     assert record.uploaded_by == "dev@lemnisca.bio"
 
 
+def test_chat_requires_a_model_key(client):
+    from backend import deps
+    client.app.dependency_overrides[deps.gemini_api_key] = lambda: None
+    response = client.post("/api/generate/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert response.status_code == 503
+
+
+def test_chat_returns_reply_and_spec(client, monkeypatch):
+    from backend import deps
+    import backend.routes_generate as rg
+    client.app.dependency_overrides[deps.gemini_api_key] = lambda: "test-key"
+    monkeypatch.setattr(rg, "run_geometry_chat",
+                        lambda messages, api_key: {"reply": "Building it.", "spec": GOLDEN_PARAMS})
+    response = client.post(
+        "/api/generate/chat",
+        json={"messages": [{"role": "user", "content": "30kL dished tank"}]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reply"] == "Building it."
+    assert body["spec"]["tank"]["diameter_m"] == 2.09
+
+
 def test_preview_returns_editable_case_files(client):
     response = client.post("/api/generate/preview", json={"params": GOLDEN_PARAMS})
     assert response.status_code == 200

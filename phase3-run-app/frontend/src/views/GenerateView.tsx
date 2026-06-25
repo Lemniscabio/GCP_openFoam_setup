@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { GeometryChat } from "@/components/GeometryChat";
 import { StlViewer } from "@/components/StlViewer";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toast } from "@/components/ui/Toast";
@@ -95,6 +96,11 @@ export function GenerateView({
   canRun: boolean;
   onCreated: (project: string, caseIds: string[]) => void;
 }) {
+  const [inputMode, setInputMode] = useState<"chat" | "form">("chat");
+  // The spec/case-params that actually fed the current preview — from chat OR the form.
+  // create + variations read these so both on-ramps behave identically downstream.
+  const [activeSpec, setActiveSpec] = useState<JsonObject | null>(null);
+  const [activeCaseParams, setActiveCaseParams] = useState<JsonObject | null>(null);
   const [physics, setPhysics] = useState<Physics>("single_phase");
   const [spec, setSpec] = useState<JsonObject>(structuredClone(DEFAULT_SPEC));
   const [rpm, setRpm] = useState("100");
@@ -148,13 +154,24 @@ export function GenerateView({
     return cp;
   }
 
-  async function generatePreview() {
+  // Derive solver CaseParams from a finalized geometry spec (chat path): rpm from the
+  // spec's operating point; viscosity defaults for single-phase (tune later via the file
+  // editor or a viscosity variation sweep).
+  function caseParamsFromSpec(s: JsonObject): JsonObject {
+    const cp: JsonObject = { rpm: Number(s?.operating?.rpm ?? 100) };
+    if ((s?.physics ?? "single_phase") === "single_phase") cp.viscosity_m2_s = 1e-6;
+    return cp;
+  }
+
+  async function runPreview(params: JsonObject, caseParams: JsonObject) {
     if (!canRun || previewing) return;
     setPreviewing(true);
     setError(null);
     try {
-      const result = await api.generatePreview({ params: buildParams(), case_params: buildCaseParams() });
+      const result = await api.generatePreview({ params, case_params: caseParams });
       setPreview(result);
+      setActiveSpec(params);
+      setActiveCaseParams(caseParams);
       const files = result.files || {};
       setCaseFiles(files);
       const keys = Object.keys(files);
@@ -167,15 +184,20 @@ export function GenerateView({
     }
   }
 
+  const generatePreview = () => runPreview(buildParams(), buildCaseParams());
+  const previewFromSpec = (s: JsonObject) => runPreview(s, caseParamsFromSpec(s));
+
   // Variation axes: comma-separated value lists. Geometry-fixed params only.
   function parseList(text: string): number[] {
     return text.split(",").map((x) => x.trim()).filter(Boolean).map(Number).filter((n) => Number.isFinite(n));
   }
+  // Physics that actually backs the current preview (chat spec wins over form state).
+  const effectivePhysics: Physics = (activeSpec?.physics as Physics) ?? physics;
   function buildAxes(): Record<string, number[]> {
     const axes: Record<string, number[]> = {};
     const rpmValues = parseList(varyRpm);
     if (rpmValues.length) axes.rpm = rpmValues;
-    if (physics === "single_phase") {
+    if (effectivePhysics === "single_phase") {
       const v = parseList(varyVisc);
       if (v.length) axes.viscosity_m2_s = v;
     } else {
@@ -192,15 +214,15 @@ export function GenerateView({
   const variationBreakdown = Object.entries(axes).map(([key, list]) => `${list.length} ${_axisLabel[key]}`).join(" × ");
 
   async function createVariations() {
-    if (!canRun || !preview || invalidProject || creating || variationCount === 0) return;
+    if (!canRun || !preview || !activeSpec || invalidProject || creating || variationCount === 0) return;
     const selectedProject = project.trim();
     setCreating(true);
     setError(null);
     try {
       const result = await api.generateVariations({
         project: selectedProject,
-        params: buildParams(),
-        case_params: buildCaseParams(),
+        params: activeSpec,
+        case_params: activeCaseParams ?? undefined,
         files: caseFiles,
         axes,
       });
@@ -215,15 +237,15 @@ export function GenerateView({
   }
 
   async function createCase() {
-    if (!canRun || !preview || invalidProject || creating) return;
+    if (!canRun || !preview || !activeSpec || invalidProject || creating) return;
     const selectedProject = project.trim();
     setCreating(true);
     setError(null);
     try {
       const result = await api.generateCreate({
         project: selectedProject,
-        params: buildParams(),
-        case_params: buildCaseParams(),
+        params: activeSpec,
+        case_params: activeCaseParams ?? undefined,
         files: caseFiles,
       });
       setToast(`Case ${result.case_id} created`);
@@ -304,12 +326,20 @@ export function GenerateView({
           <div className="ph-num">01</div>
           <div className="ph-text">
             <div className="ph-title">Generate a stirred-tank case</div>
-            <div className="ph-sub">Fill in the reactor spec, preview the geometry, then create the case.</div>
+            <div className="ph-sub">{inputMode === "chat" ? "Describe the reactor — the assistant builds the geometry, asking if anything's unclear." : "Fill in the reactor spec, preview the geometry, then create the case."}</div>
           </div>
+          <Button variant="outline" size="sm" disabled={!canRun} onClick={() => { setInputMode(inputMode === "chat" ? "form" : "chat"); setPreview(null); }}>
+            {inputMode === "chat" ? "Do it manually" : "Back to chat"}
+          </Button>
         </div>
         <div className="panel-body">
           {!canRun && <div className="empty-state" style={{ fontStyle: "normal" }}>Your viewer role is read-only. Generation and case creation are disabled.</div>}
 
+          {inputMode === "chat" && (
+            <GeometryChat disabled={!canRun} busyPreview={previewing} onGenerate={previewFromSpec} />
+          )}
+
+          {inputMode === "form" && (<>
           <div className="field w-full">
             <div className="tabs" role="group" aria-label="Physics mode">
               <button type="button" className={`tab${physics === "single_phase" ? " on" : ""}`} disabled={!canRun} onClick={() => { setPhysics("single_phase"); setPreview(null); }}>
@@ -360,6 +390,7 @@ export function GenerateView({
               {!canRun ? "Read-only" : previewing ? "Generating…" : errors.length > 0 ? "Fix errors to preview" : "Generate preview"}
             </Button>
           </div>
+          </>)}
           {error && <div style={{ color: "#dc2626", fontSize: 13, lineHeight: 1.5 }}>ERROR: {error}</div>}
         </div>
       </div>
@@ -428,10 +459,10 @@ export function GenerateView({
                 <ConfigValue label="Blade height" value={`${fmt(valueAt(resolved ?? {}, "impellers.blade_height_m"))} m`} />
                 <ConfigValue label="Baffle width" value={`${fmt(valueAt(resolved ?? {}, "baffles.width_m"))} m`} />
                 <ConfigValue label="RPM" value={String(preview.case_params?.rpm ?? "—")} />
-                <ConfigValue label="Solver" value={physics === "two_phase" ? "multiphaseEuler" : "incompressibleFluid"} />
-                <ConfigValue label="Turbulence" value={physics === "two_phase" ? "kEpsilon (liquid) / laminar (gas)" : "kEpsilon"} />
-                {physics === "single_phase" && <ConfigValue label="Viscosity" value={`${preview.case_params?.viscosity_m2_s ?? "—"} m²/s`} />}
-                {physics === "two_phase" && <ConfigValue label="Gas flow" value={`${gasVvm} vvm`} />}
+                <ConfigValue label="Solver" value={effectivePhysics === "two_phase" ? "multiphaseEuler" : "incompressibleFluid"} />
+                <ConfigValue label="Turbulence" value={effectivePhysics === "two_phase" ? "kEpsilon (liquid) / laminar (gas)" : "kEpsilon"} />
+                {effectivePhysics === "single_phase" && <ConfigValue label="Viscosity" value={`${preview.case_params?.viscosity_m2_s ?? "—"} m²/s`} />}
+                {effectivePhysics === "two_phase" && <ConfigValue label="Gas flow" value={`${valueAt(resolved ?? {}, "operating.gas_flow_vvm") ?? "—"} vvm`} />}
               </div>
 
               <div className="field w-full">
@@ -465,7 +496,7 @@ export function GenerateView({
                 </summary>
                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <ParamField label="RPM values" unit="rpm" type="text" value={varyRpm} disabled={!canRun} placeholder="e.g. 50, 100, 150" onChange={setVaryRpm} />
-                  {physics === "single_phase" ? (
+                  {effectivePhysics === "single_phase" ? (
                     <ParamField label="Viscosity values" unit="m²/s" type="text" value={varyVisc} disabled={!canRun} placeholder="e.g. 1e-6, 1e-5" onChange={setVaryVisc} />
                   ) : (
                     <ParamField label="Gas-flow values" unit="vvm" type="text" value={varyGas} disabled={!canRun} placeholder="e.g. 0.3, 0.5, 0.8" onChange={setVaryGas} />
