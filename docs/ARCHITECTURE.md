@@ -303,11 +303,45 @@ id allocation and idempotency).
   - **Browser** (`generate.py` + `uploads.py`): the backend mints **per-file V4 signed PUT URLs**
     (`SignedUrlService`, **keyless** — the backend SA signs via IAM `signBlob` using its own OAuth
     token, holding Token Creator on itself); the browser PUTs files directly to GCS.
-  - **Generate-then-commit** (`generate.py`): `build_case_local` can build a case from a prompt
-    (Gemini → `STRParams` via `str_cad.extract`) or explicit params, then `commit_case` uploads it and
-    records it.
+  - **Generate-then-commit** (`generate.py`): `build_case_local(params, case_params)` runs the
+    deterministic pipeline (`export_geometry` → `build_case`) into a temp dir; `commit_case`
+    uploads the tree and records it. See 3.2.1 for the Generate-tab flow that drives it.
 - **`validate_case`**: a case is runnable only if `manifest.json`, `READY`, `case/command.sh`
   (referencing `MPI_RANKS`), and a valid `case/metadata.json` all exist.
+
+## 3.2.1 Geometry creation in the web app (chat + form, inspect/edit, variations)
+
+The **Generate** tab (`frontend/src/views/GenerateView.tsx`) has two interchangeable on-ramps that
+both produce the same validated `STRParams` spec and feed the same downstream flow. Whichever
+on-ramp is used, the resulting spec + case-params become a single `activeSpec`/`activeCaseParams`
+source of truth, so preview, create, and variations behave identically.
+
+- **Chat (default)** — `components/GeometryChat.tsx` ↔ `POST /api/generate/chat`
+  (`backend/routes_generate.py` → `core/geometry_chat.py`). You describe the reactor in plain
+  language; the agent (Gemini, model key from the `GEMINI_API_KEY` secret) asks for any missing
+  required fields, then emits a spec in a fenced ```json block. The agent's only knowledge is the
+  **schema description** (`core/schema_doc.py`, derived from `STRParams` so it never drifts) — not
+  the geometry code; it never computes physics/geometry. The spec is validated **server-side**
+  against the real `STRParams.model_validate` with a bounded retry, so an invalid spec can never be
+  handed off. The endpoint returns `{reply, spec|null}` (spec non-null only when complete + valid).
+  The agent can also answer volume questions but does **not** infer geometry from a volume
+  (documented limitation). Conversation state is in-memory in the frontend (clears on reload).
+- **Form** ("Do it manually") — the structured spec form; kept as the deterministic fallback when
+  the model is unavailable. Same fields, inline validation, live derived-value placeholders.
+- **Preview** — `POST /api/generate/preview` runs the deterministic geometry + case build in a temp
+  dir and returns base64 region STLs (rendered by `components/StlViewer.tsx`, three.js) **plus the
+  generated case's text files** (`read_case_files` — every `0/`/`constant/`/`system/` dict +
+  `command.sh`, excluding binary STLs).
+- **Inspect / edit** — the preview's files are shown in a VS-Code-style tree + editor. On create,
+  `apply_file_overlays` writes the user's edits over the regenerated case before commit (confined to
+  existing files within the case dir; path-traversal guarded). So any dict (solver, schemes, BCs…)
+  can be hand-edited before the case is committed.
+- **Create** — `POST /api/generate/create` (single case) commits the edited tree via `commit_case`.
+- **Variations** — `POST /api/generate/variations` spins N cases over geometry-fixed operating axes
+  (rpm + viscosity for single-phase; rpm + gas-flow for two-phase), the Cartesian product capped at
+  `MAX_VARIATIONS`. Each variation regenerates from the base spec with the swept value applied and
+  re-overlays the user's edits to all non-swept files (`overlay_minus_swept` excludes the files a
+  swept axis regenerates), so edits carry into every case while the swept value is preserved.
 
 ## 3.3 Batch job spec (`core/batch_jobs.py`, `disks.py`, `machines.py`, `config.py`, `naming.py`)
 
@@ -369,7 +403,10 @@ The script the Batch VM actually runs (inside the OpenFOAM image: `microfluidica
 
 Results live in GCS as a tarball + logs. The backend can stream a **zip** of selected result objects
 (`build_zip`, streaming `ZIP_STORED` straight from GCS to the response) and mint **signed GET URLs**
-(`SignedUrlService.get_url`, optional content-disposition) for direct browser download.
+(`SignedUrlService.get_url`, optional content-disposition) for direct browser download. The
+Results UI shows an integrity warning for large downloads (>~1.5 GB or unknown-size whole-run
+archives): browser downloads aren't checksum-verified, so a flaky connection can corrupt a
+multi-GB file — for important files, pull directly from GCS (`gcloud storage cp` auto-verifies).
 
 ## 3.7 Web app, auth, RBAC (`backend/`)
 
@@ -385,6 +422,11 @@ Results live in GCS as a tarball + logs. The backend can stream a **zip** of sel
   is stronger than an email-suffix match — personal/non-Workspace accounts have no `hd` and are rejected
   outright, so no look-alike address can slip through. A `OF_DEV_NO_IAP` env flag bypasses auth for
   local dev. (`backend/iap.py` is a dormant alternative IAP-JWT path, not the deployed one.)
+- **Session keep-alive** (`frontend/src/lib/auth.ts`, `SignInGate.tsx`): a Google ID token expires
+  in ~1h and the backend rejects an expired one, so while the tab is active the token is **silently
+  re-issued** before it expires (One Tap `auto_select`) — an active user is not logged out mid-work.
+  Only after the token has lapsed AND the user has been idle past a timeout (or renewal can't
+  recover) does it fall back to the sign-in screen. There is no artificial session cap.
 - **RBAC** (`users.py`, `rbac.py`): `of_users` records with roles `admin|runner|viewer` and status
   `pending|active|disabled`. `resolve_on_login` ensures **seed admins** are always admin/active and
   brand-new users land as `pending` (an admin approves them). Routes enforce role.
